@@ -1,5 +1,6 @@
 const express = require('express');
 const { saveDeveloper, loadDeveloper, listDevelopers, filterSessions, computeTotals } = require('./store');
+const { getProductivityAnalytics } = require('./analytics');
 
 function createTeamRouter() {
   const router = express.Router();
@@ -120,6 +121,17 @@ function createTeamRouter() {
         return res.json({ ...data, sessions, totals: computeTotals(sessions), dailyUsage });
       }
       res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/team/productivity - Full productivity analytics
+  // ?from=YYYY-MM-DD&to=YYYY-MM-DD for date range filtering
+  router.get('/productivity', (req, res) => {
+    try {
+      const { from, to } = req.query;
+      res.json(getProductivityAnalytics(from, to));
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

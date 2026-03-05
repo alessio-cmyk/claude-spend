@@ -3,280 +3,163 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Claude Spend - Team Leaderboard</title>
+<title>Claude Spend - Team Dashboard</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
   :root {
-    --bg: #F8F9FC;
-    --white: #FFFFFF;
-    --text: #0F172A;
-    --text-secondary: #475569;
-    --text-tertiary: #94A3B8;
-    --border: rgba(0,0,0,0.06);
-    --border-strong: rgba(0,0,0,0.1);
-    --indigo: #6366F1;
-    --violet: #8B5CF6;
-    --teal: #14B8A6;
-    --emerald: #10B981;
-    --amber: #F59E0B;
-    --orange: #F97316;
-    --rose: #F43F5E;
-    --blue: #3B82F6;
+    --bg: #F8F9FC; --white: #FFFFFF; --text: #0F172A;
+    --text-secondary: #475569; --text-tertiary: #94A3B8;
+    --border: rgba(0,0,0,0.06); --border-strong: rgba(0,0,0,0.1);
+    --indigo: #6366F1; --violet: #8B5CF6; --teal: #14B8A6;
+    --emerald: #10B981; --amber: #F59E0B; --orange: #F97316;
+    --rose: #F43F5E; --blue: #3B82F6;
     --gradient-main: linear-gradient(135deg, #6366F1, #8B5CF6, #A855F7);
     --gradient-teal: linear-gradient(135deg, #14B8A6, #06B6D4);
     --gradient-warm: linear-gradient(135deg, #F59E0B, #F97316);
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
     --shadow-md: 0 4px 16px rgba(0,0,0,0.06);
     --shadow-lg: 0 8px 32px rgba(0,0,0,0.08);
-    --radius: 16px;
-    --radius-sm: 10px;
+    --radius: 16px; --radius-sm: 10px;
     --font: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
   }
-
-  body {
-    font-family: var(--font); background: var(--bg); color: var(--text);
-    line-height: 1.6; min-height: 100vh; overflow-x: hidden;
-  }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; overflow-x: hidden; }
   body::before {
     content: ''; position: fixed; top: 0; left: 0; right: 0; height: 600px;
-    background:
-      radial-gradient(ellipse 80% 60% at 10% 0%, rgba(99,102,241,0.12) 0%, transparent 60%),
+    background: radial-gradient(ellipse 80% 60% at 10% 0%, rgba(99,102,241,0.12) 0%, transparent 60%),
       radial-gradient(ellipse 60% 50% at 90% 10%, rgba(139,92,246,0.08) 0%, transparent 50%),
       radial-gradient(ellipse 50% 40% at 50% 20%, rgba(20,184,166,0.06) 0%, transparent 50%);
     pointer-events: none; z-index: 0;
   }
-
-  .loading {
-    display: flex; align-items: center; justify-content: center;
-    min-height: 100vh; flex-direction: column; gap: 20px;
-  }
-  .spinner {
-    width: 36px; height: 36px;
-    border: 3px solid var(--border); border-top-color: var(--indigo);
-    border-radius: 50%; animation: spin 0.7s linear infinite;
-  }
+  .loading { display: flex; align-items: center; justify-content: center; min-height: 100vh; flex-direction: column; gap: 20px; }
+  .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--indigo); border-radius: 50%; animation: spin 0.7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .loading-text { color: var(--text-secondary); font-size: 15px; font-weight: 500; }
-
   .container { max-width: 1200px; margin: 0 auto; padding: 40px 28px 60px; position: relative; z-index: 1; }
-
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(16px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
   .animate { animation: fadeUp 0.5s ease-out both; }
-  .delay-1 { animation-delay: 0.05s; }
-  .delay-2 { animation-delay: 0.1s; }
-  .delay-3 { animation-delay: 0.15s; }
-  .delay-4 { animation-delay: 0.2s; }
+  .delay-1 { animation-delay: 0.05s; } .delay-2 { animation-delay: 0.1s; }
+  .delay-3 { animation-delay: 0.15s; } .delay-4 { animation-delay: 0.2s; }
 
   /* Header */
-  .header {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 36px; flex-wrap: wrap; gap: 16px;
-  }
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
   .header-left { display: flex; align-items: center; gap: 14px; }
-  .logo-mark {
-    width: 40px; height: 40px; border-radius: 12px;
-    background: var(--gradient-main);
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 4px 12px rgba(99,102,241,0.3);
-  }
+  .logo-mark { width: 40px; height: 40px; border-radius: 12px; background: var(--gradient-main); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
   .logo-mark svg { width: 22px; height: 22px; }
   .header h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
   .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
-  .btn {
-    background: var(--white); border: 1px solid var(--border);
-    color: var(--text-secondary); padding: 7px 16px; border-radius: 20px;
-    cursor: pointer; font-size: 13px; font-weight: 500; font-family: var(--font);
-    transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px;
-  }
+  /* Tabs */
+  .nav-tabs { display: flex; gap: 4px; background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 24px; }
+  .nav-tab { padding: 8px 20px; border-radius: 9px; font-size: 13px; font-weight: 600; color: var(--text-secondary); cursor: pointer; transition: all 0.15s; border: none; background: none; font-family: var(--font); }
+  .nav-tab:hover { color: var(--text); }
+  .nav-tab.active { background: var(--indigo); color: white; box-shadow: 0 2px 8px rgba(99,102,241,0.25); }
+
+  /* Buttons */
+  .btn { background: var(--white); border: 1px solid var(--border); color: var(--text-secondary); padding: 7px 16px; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 500; font-family: var(--font); transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
   .btn:hover { border-color: var(--indigo); color: var(--indigo); box-shadow: 0 2px 8px rgba(99,102,241,0.12); }
-  .btn.active { background: var(--indigo); color: white; border-color: var(--indigo); }
 
-  /* Date range bar */
-  .date-bar {
-    display: flex; align-items: center; gap: 8px; margin-bottom: 28px;
-    flex-wrap: wrap;
-  }
-  .date-bar .presets { display: flex; gap: 4px; }
-  .date-bar .preset {
-    padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
-    cursor: pointer; border: 1px solid var(--border); background: var(--white);
-    color: var(--text-secondary); transition: all 0.15s; font-family: var(--font);
-  }
-  .date-bar .preset:hover { border-color: var(--indigo); color: var(--indigo); }
-  .date-bar .preset.active { background: var(--indigo); color: white; border-color: var(--indigo); }
-  .date-bar .custom-range {
-    display: flex; align-items: center; gap: 6px; margin-left: 8px;
-  }
-  .date-bar input[type="date"] {
-    padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border);
-    font-size: 12px; font-weight: 500; font-family: var(--font); color: var(--text);
-    background: var(--white); outline: none; transition: border-color 0.2s;
-  }
-  .date-bar input[type="date"]:focus { border-color: var(--indigo); }
-  .date-bar .apply-btn {
-    padding: 5px 12px; border-radius: 8px; font-size: 12px; font-weight: 600;
-    cursor: pointer; border: none; background: var(--indigo); color: white;
-    font-family: var(--font); transition: opacity 0.15s;
-  }
-  .date-bar .apply-btn:hover { opacity: 0.9; }
-  .active-range {
-    font-size: 12px; color: var(--text-tertiary); font-weight: 500;
-    margin-left: auto;
-  }
+  /* Date bar */
+  .date-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  .presets { display: flex; gap: 4px; }
+  .preset { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--white); color: var(--text-secondary); transition: all 0.15s; font-family: var(--font); }
+  .preset:hover { border-color: var(--indigo); color: var(--indigo); }
+  .preset.active { background: var(--indigo); color: white; border-color: var(--indigo); }
+  .custom-range { display: flex; align-items: center; gap: 6px; margin-left: 8px; }
+  .custom-range input[type="date"] { padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border); font-size: 12px; font-weight: 500; font-family: var(--font); color: var(--text); background: var(--white); outline: none; }
+  .custom-range input[type="date"]:focus { border-color: var(--indigo); }
+  .apply-btn { padding: 5px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: var(--indigo); color: white; font-family: var(--font); }
+  .active-range { font-size: 12px; color: var(--text-tertiary); font-weight: 500; margin-left: auto; }
 
-  /* Hero */
-  .hero-section { text-align: center; margin-bottom: 36px; }
-  .hero-title {
-    font-size: 38px; font-weight: 800; letter-spacing: -1.5px;
-    background: var(--gradient-main); -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent; background-clip: text;
-    margin-bottom: 10px; line-height: 1.3;
-  }
-  .hero-subtitle { font-size: 15px; color: var(--text-secondary); font-weight: 500; line-height: 1.7; }
-
-  /* Stat cards */
-  .stats-row {
-    display: grid; grid-template-columns: repeat(4, 1fr);
-    gap: 16px; margin-bottom: 32px;
-  }
-  @media (max-width: 780px) { .stats-row { grid-template-columns: repeat(2, 1fr); } }
-  .stat-card {
-    background: var(--white); border-radius: var(--radius);
-    padding: 24px; border: 1px solid var(--border);
-    box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;
-  }
+  /* Cards */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .stats-row-5 { grid-template-columns: repeat(5, 1fr); }
+  @media (max-width: 900px) { .stats-row, .stats-row-5 { grid-template-columns: repeat(2, 1fr); } }
+  .stat-card { background: var(--white); border-radius: var(--radius); padding: 22px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; }
   .stat-card:hover { box-shadow: var(--shadow-md); }
-  .stat-label {
-    font-size: 12px; font-weight: 600; color: var(--text-tertiary);
-    text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px;
-  }
-  .stat-value {
-    font-size: 34px; font-weight: 800; letter-spacing: -2px;
-    line-height: 1; margin-bottom: 6px;
-  }
-  .stat-sub { font-size: 13px; color: var(--text-tertiary); font-weight: 500; }
+  .stat-label { font-size: 11px; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px; }
+  .stat-value { font-size: 30px; font-weight: 800; letter-spacing: -1.5px; line-height: 1; margin-bottom: 5px; }
+  .stat-sub { font-size: 12px; color: var(--text-tertiary); font-weight: 500; }
 
-  /* Section headers */
+  /* Section */
   .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-  .section-icon {
-    width: 28px; height: 28px; border-radius: 8px;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  }
+  .section-icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .section-icon svg { width: 16px; height: 16px; }
   .section-title { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
 
-  /* Leaderboard table */
-  .table-card {
-    background: var(--white); border-radius: var(--radius);
-    border: 1px solid var(--border); box-shadow: var(--shadow-sm);
-    overflow: hidden; margin-bottom: 32px;
-  }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th {
-    text-align: left; padding: 12px 16px;
-    font-size: 11px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.6px; color: var(--text-tertiary);
-    border-bottom: 1px solid var(--border); background: #FAFBFC;
-    cursor: pointer; user-select: none; white-space: nowrap;
-  }
+  /* Tables */
+  .table-card { background: var(--white); border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow-sm); overflow: hidden; margin-bottom: 28px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-tertiary); border-bottom: 1px solid var(--border); background: #FAFBFC; cursor: pointer; user-select: none; white-space: nowrap; }
   th:hover { color: var(--text-secondary); }
   th.sorted { color: var(--indigo); }
-  td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
   tbody tr { transition: background 0.1s; cursor: pointer; }
   tbody tr:hover td { background: #FAFBFF; }
   tbody tr:last-child td { border-bottom: none; }
+  .token-num { font-family: var(--mono); font-size: 12px; font-weight: 600; text-align: right; white-space: nowrap; letter-spacing: -0.3px; }
 
-  .token-num {
-    font-family: var(--mono); font-size: 13px; font-weight: 600;
-    text-align: right; white-space: nowrap; letter-spacing: -0.3px;
-  }
-  .rank-badge {
-    width: 28px; height: 28px; border-radius: 8px;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: 12px; font-weight: 700; color: var(--text-secondary);
-    background: var(--bg);
-  }
+  /* Badges */
+  .rank-badge { width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--text-secondary); background: var(--bg); }
   .rank-1 { background: var(--gradient-main); color: white; }
   .rank-2 { background: var(--gradient-teal); color: white; }
   .rank-3 { background: var(--gradient-warm); color: white; }
-
-  .bar-track { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
-  .bar-fill { height: 100%; border-radius: 3px; }
-
-  .recency-dot {
-    width: 8px; height: 8px; border-radius: 50%; display: inline-block;
-  }
-
-  /* Dev detail */
-  .kpi-grid {
-    display: grid; grid-template-columns: repeat(3, 1fr);
-    gap: 16px; margin-bottom: 32px;
-  }
-  @media (max-width: 780px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
-
-  .charts-grid {
-    display: grid; grid-template-columns: 5fr 2fr;
-    gap: 16px; margin-bottom: 32px;
-  }
-  @media (max-width: 800px) { .charts-grid { grid-template-columns: 1fr; } }
-
-  .chart-card {
-    background: var(--white); border-radius: var(--radius);
-    padding: 24px; border: 1px solid var(--border); box-shadow: var(--shadow-sm);
-  }
-  .chart-card h3 {
-    font-size: 13px; font-weight: 700; color: var(--text-tertiary);
-    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 20px;
-  }
-  canvas { display: block; }
-  .legend { display: flex; gap: 20px; margin-top: 16px; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
-  .legend-item { display: flex; align-items: center; gap: 7px; }
-  .legend-dot { width: 10px; height: 10px; border-radius: 4px; flex-shrink: 0; }
-
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 32px; }
-  @media (max-width: 800px) { .grid-2 { grid-template-columns: 1fr; } }
-
-  .model-badge {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
-  }
-  .model-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-  .model-opus { background: #EEF2FF; color: #3730A3; }
-  .model-sonnet { background: #ECFDF5; color: #047857; }
-  .model-haiku { background: #FFF7ED; color: #C2410C; }
+  .trend-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .trend-up { background: #ECFDF5; color: #047857; }
+  .trend-down { background: #FEF2F2; color: #B91C1C; }
+  .trend-flat { background: #F1F5F9; color: #475569; }
+  .model-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .model-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .model-opus { background: #EEF2FF; color: #3730A3; } .model-opus .model-dot { background: #4F46E5; }
+  .model-sonnet { background: #ECFDF5; color: #047857; } .model-sonnet .model-dot { background: #10B981; }
+  .model-haiku { background: #FFF7ED; color: #C2410C; } .model-haiku .model-dot { background: #F97316; }
   .model-unknown { background: #F1F5F9; color: #475569; }
-  .model-opus .model-dot { background: #4F46E5; }
-  .model-sonnet .model-dot { background: #10B981; }
-  .model-haiku .model-dot { background: #F97316; }
 
-  .proj-name {
-    font-weight: 600; font-size: 13px;
-    font-family: var(--mono); letter-spacing: -0.2px;
-  }
+  .bar-track { height: 5px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; }
+  .recency-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 
-  .empty-state {
-    text-align: center; padding: 60px 20px; color: var(--text-tertiary);
-  }
+  /* Charts */
+  .charts-grid { display: grid; grid-template-columns: 5fr 2fr; gap: 16px; margin-bottom: 28px; }
+  @media (max-width: 800px) { .charts-grid { grid-template-columns: 1fr; } }
+  .chart-card { background: var(--white); border-radius: var(--radius); padding: 22px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
+  .chart-card h3 { font-size: 12px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px; }
+  canvas { display: block; }
+  .legend { display: flex; gap: 16px; margin-top: 14px; font-size: 11px; font-weight: 500; color: var(--text-secondary); flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 3px; flex-shrink: 0; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+  @media (max-width: 800px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  /* Health score */
+  .health-ring { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800; flex-shrink: 0; }
+
+  /* ROI bars */
+  .roi-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .roi-label { width: 130px; font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+  .roi-track { flex: 1; height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+  .roi-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
+  .roi-value { width: 32px; font-size: 13px; font-weight: 700; text-align: right; }
+
+  /* Tool bars */
+  .tool-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .tool-name { width: 130px; font-size: 11px; color: var(--text-secondary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tool-count { width: 40px; font-size: 11px; font-weight: 600; text-align: right; font-family: var(--mono); }
+
+  .proj-name { font-weight: 600; font-size: 12px; font-family: var(--mono); letter-spacing: -0.2px; }
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--text-tertiary); }
   .empty-state h3 { font-size: 18px; color: var(--text-secondary); margin-bottom: 12px; }
-  .empty-state code {
-    background: var(--bg); padding: 4px 10px; border-radius: 6px;
-    font-size: 13px; font-weight: 600; color: var(--indigo);
-  }
-
-  .footer {
-    text-align: center; padding: 24px; color: var(--text-tertiary);
-    font-size: 13px; font-weight: 500;
-  }
+  .empty-state code { background: var(--bg); padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; color: var(--indigo); }
+  .footer { text-align: center; padding: 24px; color: var(--text-tertiary); font-size: 13px; font-weight: 500; }
   .footer a { color: var(--indigo); text-decoration: none; font-weight: 600; }
-  .footer a:hover { text-decoration: underline; }
+
+  /* Productivity table */
+  .prod-table td { font-size: 12px; }
+  .prod-table .dev-name { font-weight: 600; font-size: 13px; }
+  .mini-bar { display: inline-block; height: 4px; border-radius: 2px; vertical-align: middle; }
 </style>
 </head>
 <body>
@@ -290,8 +173,9 @@
 
 <script>
 // --- State ---
-let DATA = null;
-let currentView = 'leaderboard';
+let LB_DATA = null;
+let PROD_DATA = null;
+let currentTab = 'leaderboard'; // leaderboard | productivity | dev
 let selectedDev = null;
 let dateRange = { preset: 'all', from: null, to: null };
 let sortState = { key: 'totalTokens', dir: 'desc' };
@@ -307,94 +191,67 @@ function fmt(n) {
 }
 function fmtFull(n) { return (n || 0).toLocaleString(); }
 function fmtCost(n) { return '$' + (n || 0).toFixed(2); }
-function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function fmtPct(n) { return (n || 0).toFixed(1) + '%'; }
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function formatDate(d) {
   if (!d) return '';
-  const parts = d.split('-');
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return months[parseInt(parts[1])-1] + ' ' + parseInt(parts[2]);
+  const p = d.split('-');
+  const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return m[parseInt(p[1])-1] + ' ' + parseInt(p[2]);
 }
 function toISO(d) { return d.toISOString().split('T')[0]; }
-function daysAgo(n) {
-  const d = new Date(); d.setDate(d.getDate() - n); return toISO(d);
-}
-function modelClass(m) {
-  if (m.includes('opus')) return 'model-opus';
-  if (m.includes('sonnet')) return 'model-sonnet';
-  if (m.includes('haiku')) return 'model-haiku';
-  return 'model-unknown';
-}
+function daysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return toISO(d); }
+function modelClass(m) { if(m.includes('opus'))return'model-opus'; if(m.includes('sonnet'))return'model-sonnet'; if(m.includes('haiku'))return'model-haiku'; return'model-unknown'; }
 function modelShort(m) {
-  let match = m.match(/^claude-(opus|sonnet|haiku)-(\d+)-(\d+)/i);
-  if (match) return match[1].charAt(0).toUpperCase() + match[1].slice(1) + ' ' + match[2] + '.' + match[3];
-  match = m.match(/^claude-(\d+)-(\d+)-(opus|sonnet|haiku)/i);
-  if (match) return match[3].charAt(0).toUpperCase() + match[3].slice(1) + ' ' + match[1] + '.' + match[2];
-  if (m.includes('opus')) return 'Opus';
-  if (m.includes('sonnet')) return 'Sonnet';
-  if (m.includes('haiku')) return 'Haiku';
-  return m;
+  let x = m.match(/^claude-(opus|sonnet|haiku)-(\d+)-(\d+)/i);
+  if (x) return x[1][0].toUpperCase()+x[1].slice(1)+' '+x[2]+'.'+x[3];
+  x = m.match(/^claude-(\d+)-(\d+)-(opus|sonnet|haiku)/i);
+  if (x) return x[3][0].toUpperCase()+x[3].slice(1)+' '+x[1]+'.'+x[2];
+  if(m.includes('opus'))return'Opus'; if(m.includes('sonnet'))return'Sonnet'; if(m.includes('haiku'))return'Haiku'; return m;
 }
-function projectShort(p) {
-  if (!p || p === 'unknown') return 'unknown';
-  let s = p.replace(/^[A-Za-z]--/, '');
-  const known = /^(?:Users|home|user)-[^-]+-|^(?:GitHub|GitLab|git|Projects|projects|workspace|Workspace|Desktop|Documents|source|src|dev|Dev|code|Code|repos|Repos)-/;
-  let prev;
-  do { prev = s; s = s.replace(known, ''); } while (s !== prev && s.length > 0);
-  return s || p;
+function projShort(p) {
+  if (!p||p==='unknown') return 'unknown';
+  let s = p.replace(/^[A-Za-z]--/,'');
+  const k = /^(?:Users|home|user)-[^-]+-|^(?:GitHub|GitLab|git|Projects|projects|workspace|Workspace|Desktop|Documents|source|src|dev|Dev|code|Code|repos|Repos)-/;
+  let prev; do{prev=s;s=s.replace(k,'');}while(s!==prev&&s.length>0); return s||p;
 }
-function recencyColor(lastSync) {
-  if (!lastSync) return '#CBD5E1';
-  const hours = (Date.now() - new Date(lastSync).getTime()) / 3600000;
-  if (hours < 24) return '#10B981';
-  if (hours < 72) return '#F59E0B';
-  return '#F87171';
+function recencyColor(ls) {
+  if (!ls) return '#CBD5E1';
+  const h = (Date.now() - new Date(ls).getTime()) / 3600000;
+  return h < 24 ? '#10B981' : h < 72 ? '#F59E0B' : '#F87171';
 }
-
+function trendBadge(t) {
+  const c = t > 10 ? 'trend-up' : t < -10 ? 'trend-down' : 'trend-flat';
+  return `<span class="trend-badge ${c}">${t > 0 ? '+' : ''}${t}%</span>`;
+}
 const MODEL_COLORS = { opus: '#6366F1', sonnet: '#10B981', haiku: '#F97316' };
-function getModelColor(m) {
-  for (const [k, c] of Object.entries(MODEL_COLORS)) { if (m.includes(k)) return c; }
-  return '#94A3B8';
-}
+const COLORS = ['#6366F1','#10B981','#F59E0B','#F43F5E','#3B82F6','#EC4899','#06B6D4','#8B5CF6','#F97316','#14B8A6'];
+function getModelColor(m) { for (const [k,c] of Object.entries(MODEL_COLORS)) { if(m.includes(k))return c; } return '#94A3B8'; }
 
 // --- API ---
 function getDateParams() {
   if (dateRange.preset === 'all') return '';
   let from, to = toISO(new Date());
-  if (dateRange.preset === 'custom') {
-    from = dateRange.from;
-    to = dateRange.to || to;
-  } else {
-    const days = { '1d': 1, '7d': 7, '30d': 30, '90d': 90 };
-    from = daysAgo(days[dateRange.preset]);
-  }
+  if (dateRange.preset === 'custom') { from = dateRange.from; to = dateRange.to || to; }
+  else { const days = {'1d':1,'7d':7,'30d':30,'90d':90}; from = daysAgo(days[dateRange.preset]); }
   return `from=${from}&to=${to}`;
 }
 
-async function fetchLeaderboard() {
-  const params = getDateParams();
-  const url = '/api/team/leaderboard' + (params ? '?' + params : '');
-  const res = await fetch(url);
-  return res.json();
-}
-
-async function fetchDevDetail(devId) {
-  const params = getDateParams();
-  const sep = params ? '&' : '';
-  const url = '/api/team/dev/' + encodeURIComponent(devId) + '?lite=1' + sep + params;
-  const res = await fetch(url);
-  return res.json();
-}
-
-// --- Routing ---
-async function loadAndRender() {
+async function loadData() {
   try {
-    DATA = await fetchLeaderboard();
+    const dp = getDateParams();
+    const q = dp ? '?' + dp : '';
+    const [lbRes, prodRes] = await Promise.all([
+      fetch('/api/team/leaderboard' + q),
+      fetch('/api/team/productivity' + q)
+    ]);
+    LB_DATA = await lbRes.json();
+    PROD_DATA = await prodRes.json();
     render();
   } catch (e) {
     document.getElementById('loading').innerHTML =
       '<div style="font-size:48px;margin-bottom:16px">&#9888;&#65039;</div>' +
-      '<div style="color:#64748b;font-size:15px">Failed to load: ' + escapeHtml(e.message) + '</div>' +
-      '<button onclick="location.reload()" style="margin-top:16px;padding:8px 20px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;font-size:14px;font-family:inherit">Retry</button>';
+      '<div style="color:#64748b;font-size:15px">Failed to load: ' + esc(e.message) + '</div>';
   }
 }
 
@@ -403,489 +260,390 @@ function render() {
   const app = document.getElementById('app');
   app.style.display = 'block';
   app.innerHTML = '';
-
-  if (currentView === 'leaderboard') renderLeaderboard(app);
-  else if (currentView === 'dev') renderDevView(app);
+  if (currentTab === 'dev') renderDevView(app);
+  else renderMainView(app);
 }
 
-function goToDev(devId) { selectedDev = devId; currentView = 'dev'; render(); }
-function goToLeaderboard() { selectedDev = null; currentView = 'leaderboard'; render(); }
-
-function setPreset(preset) {
-  dateRange = { preset, from: null, to: null };
-  loadAndRender();
+function setTab(tab) { currentTab = tab; render(); }
+function setPreset(p) { dateRange = {preset:p,from:null,to:null}; loadData(); }
+function applyCustom() {
+  const f = document.getElementById('dateFrom').value;
+  const t = document.getElementById('dateTo').value;
+  if (!f) return;
+  dateRange = {preset:'custom',from:f,to:t||toISO(new Date())}; loadData();
 }
-function applyCustomRange() {
-  const from = document.getElementById('dateFrom').value;
-  const to = document.getElementById('dateTo').value;
-  if (!from) return;
-  dateRange = { preset: 'custom', from, to: to || toISO(new Date()) };
-  loadAndRender();
-}
+function goToDev(id) { selectedDev = id; currentTab = 'dev'; render(); }
+function goBack() { currentTab = 'leaderboard'; selectedDev = null; render(); }
 
-// --- Leaderboard View ---
-function renderLeaderboard(app) {
-  const lb = DATA.leaderboard || [];
-  const tt = DATA.teamTotals || {};
-
+// --- Main View (Leaderboard + Productivity tabs) ---
+function renderMainView(app) {
   app.innerHTML = `
     <div class="header animate">
       <div class="header-left">
-        <div class="logo-mark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        </div>
-        <h1>Team Leaderboard</h1>
+        <div class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <h1>Claude Spend</h1>
       </div>
     </div>
-
-    <div class="hero-section animate delay-1">
-      <h2 class="hero-title">Team Claude usage, visualized.</h2>
-      <p class="hero-subtitle">Track usage across your entire team. Devs sync with <code style="background:rgba(99,102,241,0.1);padding:2px 8px;border-radius:4px;font-size:13px;color:var(--indigo)">claude-spend --sync --name yourname</code></p>
+    <div class="nav-tabs animate delay-1">
+      <button class="nav-tab ${currentTab==='leaderboard'?'active':''}" onclick="setTab('leaderboard')">Leaderboard</button>
+      <button class="nav-tab ${currentTab==='productivity'?'active':''}" onclick="setTab('productivity')">Productivity</button>
     </div>
-
-    <div class="date-bar animate delay-2" id="dateBar"></div>
-    <div id="statsRow" class="stats-row"></div>
-    <div id="leaderboardSection" class="animate delay-3"></div>
-    <div class="footer">Made with <a href="https://claude.ai/code" target="_blank">Claude Code</a> and &#10084; by <a href="https://www.linkedin.com/in/writetoaniketparihar/" target="_blank">Aniket</a></div>
+    <div class="date-bar animate delay-1" id="dateBar"></div>
+    <div id="content"></div>
+    <div class="footer">Made with <a href="https://claude.ai/code" target="_blank">Claude Code</a> by <a href="https://www.linkedin.com/in/writetoaniketparihar/" target="_blank">Aniket</a></div>
   `;
-
   renderDateBar();
-  renderStats(tt, lb);
-  renderLeaderboardTable(lb);
+  if (currentTab === 'leaderboard') renderLeaderboard();
+  else renderProductivity();
 }
 
 function renderDateBar() {
-  const presets = [
-    { key: 'all', label: 'All Time' },
-    { key: '1d', label: 'Last Day' },
-    { key: '7d', label: '7 Days' },
-    { key: '30d', label: '30 Days' },
-    { key: '90d', label: '90 Days' },
-  ];
-
-  const bar = document.getElementById('dateBar');
-  const presetHtml = presets.map(p =>
-    `<button class="preset ${dateRange.preset === p.key ? 'active' : ''}" onclick="setPreset('${p.key}')">${p.label}</button>`
-  ).join('');
-
-  let rangeLabel = '';
-  if (dateRange.preset !== 'all') {
-    if (dateRange.preset === 'custom') {
-      rangeLabel = dateRange.from + ' to ' + (dateRange.to || 'now');
-    } else {
-      const days = { '1d': 1, '7d': 7, '30d': 30, '90d': 90 };
-      rangeLabel = daysAgo(days[dateRange.preset]) + ' to today';
-    }
-  }
-
-  bar.innerHTML = `
-    <div class="presets">${presetHtml}</div>
+  const presets = [{k:'all',l:'All Time'},{k:'1d',l:'Last Day'},{k:'7d',l:'7 Days'},{k:'30d',l:'30 Days'},{k:'90d',l:'90 Days'}];
+  document.getElementById('dateBar').innerHTML = `
+    <div class="presets">${presets.map(p => `<button class="preset ${dateRange.preset===p.k?'active':''}" onclick="setPreset('${p.k}')">${p.l}</button>`).join('')}</div>
     <div class="custom-range">
-      <input type="date" id="dateFrom" value="${dateRange.preset === 'custom' ? dateRange.from : ''}">
+      <input type="date" id="dateFrom" value="${dateRange.preset==='custom'?dateRange.from:''}">
       <span style="color:var(--text-tertiary);font-size:12px">to</span>
-      <input type="date" id="dateTo" value="${dateRange.preset === 'custom' ? dateRange.to : ''}">
-      <button class="apply-btn" onclick="applyCustomRange()">Apply</button>
+      <input type="date" id="dateTo" value="${dateRange.preset==='custom'?dateRange.to:''}">
+      <button class="apply-btn" onclick="applyCustom()">Apply</button>
     </div>
-    ${rangeLabel ? '<span class="active-range">' + rangeLabel + '</span>' : ''}
   `;
 }
 
-function renderStats(tt, lb) {
+// --- Leaderboard Tab ---
+function renderLeaderboard() {
+  const lb = LB_DATA.leaderboard || [];
+  const tt = LB_DATA.teamTotals || {};
+  const el = document.getElementById('content');
+
   const avgPerDev = tt.totalDevs > 0 ? tt.totalCost / tt.totalDevs : 0;
-  const cards = [
-    { label: 'Developers', value: tt.totalDevs || 0, sub: 'synced to leaderboard' },
-    { label: 'Total Queries', value: fmt(tt.totalQueries || 0), sub: fmtFull(tt.totalSessions || 0) + ' sessions' },
-    { label: 'Total Tokens', value: fmt(tt.totalTokens || 0), sub: 'across all developers' },
-    { label: 'Total Cost', value: fmtCost(tt.totalCost || 0), sub: fmtCost(avgPerDev) + ' per dev avg' },
-  ];
-
-  document.getElementById('statsRow').innerHTML = cards.map((c, i) => `
-    <div class="stat-card animate delay-${i+1}">
-      <div class="stat-label">${c.label}</div>
-      <div class="stat-value">${c.value}</div>
-      <div class="stat-sub">${c.sub}</div>
+  el.innerHTML = `
+    <div class="stats-row animate delay-2">
+      ${[{l:'Developers',v:tt.totalDevs||0,s:'synced'},{l:'Total Queries',v:fmt(tt.totalQueries||0),s:fmtFull(tt.totalSessions||0)+' sessions'},{l:'Total Tokens',v:fmt(tt.totalTokens||0),s:'across all devs'},{l:'Total Cost',v:fmtCost(tt.totalCost||0),s:fmtCost(avgPerDev)+' per dev'}].map(c => `
+        <div class="stat-card"><div class="stat-label">${c.l}</div><div class="stat-value">${c.v}</div><div class="stat-sub">${c.s}</div></div>
+      `).join('')}
     </div>
-  `).join('');
-}
-
-function renderLeaderboardTable(lb) {
-  const section = document.getElementById('leaderboardSection');
+    <div id="lbTable" class="animate delay-3"></div>
+  `;
 
   if (!lb.length) {
-    section.innerHTML = `
-      <div class="table-card">
-        <div class="empty-state">
-          <h3>No developers synced yet</h3>
-          <p style="margin-bottom:16px">Get started by running:</p>
-          <code>claude-spend --sync --name your-name --server http://this-server:3457</code>
-        </div>
-      </div>`;
+    document.getElementById('lbTable').innerHTML = `<div class="table-card"><div class="empty-state"><h3>No developers synced yet</h3><p>Run: <code>node src/index.js --sync --name your-name</code></p></div></div>`;
     return;
   }
 
-  const maxTokens = Math.max(...lb.map(d => d.totalTokens), 1);
-
-  section.innerHTML = `
-    <div class="section-header">
-      <div class="section-icon" style="background:linear-gradient(135deg,#E0E7FF,#C7D2FE)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="2.5" stroke-linecap="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
-      </div>
-      <div class="section-title">Leaderboard</div>
-      <span style="color:var(--text-tertiary);font-size:13px;font-weight:600;margin-left:auto">${lb.length} developer${lb.length !== 1 ? 's' : ''}</span>
-    </div>
-    <div class="table-card">
-      <table>
-        <thead><tr>
-          <th style="width:40px">#</th>
-          <th data-sort="devId">Developer</th>
-          <th data-sort="totalSessions" style="text-align:right">Sessions</th>
-          <th data-sort="totalQueries" style="text-align:right">Queries</th>
-          <th data-sort="totalTokens" style="text-align:right" class="${sortState.key === 'totalTokens' ? 'sorted' : ''}">Tokens</th>
-          <th data-sort="totalCost" style="text-align:right">Cost</th>
-          <th style="width:140px">Usage</th>
-          <th style="width:40px">Sync</th>
-        </tr></thead>
-        <tbody id="lbBody"></tbody>
-      </table>
-    </div>
+  const maxT = Math.max(...lb.map(d => d.totalTokens), 1);
+  document.getElementById('lbTable').innerHTML = `
+    <div class="table-card"><table>
+      <thead><tr><th style="width:36px">#</th><th>Developer</th><th style="text-align:right">Sessions</th><th style="text-align:right">Queries</th><th style="text-align:right" class="sorted">Tokens</th><th style="text-align:right">Cost</th><th style="width:120px">Usage</th><th style="width:36px">Sync</th></tr></thead>
+      <tbody>${lb.map((d,i) => `<tr onclick="goToDev('${esc(d.devId)}')">
+        <td><span class="rank-badge${i<3?' rank-'+(i+1):''}">${i+1}</span></td>
+        <td style="font-weight:600">${esc(d.devId)}</td>
+        <td class="token-num">${fmtFull(d.totalSessions)}</td>
+        <td class="token-num">${fmtFull(d.totalQueries)}</td>
+        <td class="token-num" style="font-weight:700">${fmt(d.totalTokens)}</td>
+        <td class="token-num">${fmtCost(d.totalCost)}</td>
+        <td><div class="bar-track"><div class="bar-fill" style="width:${(d.totalTokens/maxT*100).toFixed(1)}%;background:var(--indigo)"></div></div></td>
+        <td style="text-align:center"><span class="recency-dot" style="background:${recencyColor(d.lastSync)}" title="${d.lastSync?new Date(d.lastSync).toLocaleString():'never'}"></span></td>
+      </tr>`).join('')}</tbody>
+    </table></div>
   `;
-
-  renderLBRows(lb, maxTokens);
-
-  // Sort handlers
-  document.querySelectorAll('#leaderboardSection th[data-sort]').forEach(th => {
-    th.addEventListener('click', () => {
-      const key = th.dataset.sort;
-      if (sortState.key === key) sortState.dir = sortState.dir === 'desc' ? 'asc' : 'desc';
-      else sortState = { key, dir: 'desc' };
-      document.querySelectorAll('#leaderboardSection th').forEach(t => t.classList.remove('sorted'));
-      th.classList.add('sorted');
-      const sorted = [...lb].sort((a, b) => {
-        let va = a[key], vb = b[key];
-        if (typeof va === 'string') return sortState.dir === 'desc' ? vb.localeCompare(va) : va.localeCompare(vb);
-        return sortState.dir === 'desc' ? vb - va : va - vb;
-      });
-      renderLBRows(sorted, maxTokens);
-    });
-  });
 }
 
-function renderLBRows(lb, maxTokens) {
-  document.getElementById('lbBody').innerHTML = lb.map((d, i) => {
-    const rankCls = i < 3 ? ' rank-' + (i + 1) : '';
-    const barPct = (d.totalTokens / maxTokens * 100).toFixed(1);
-    const rc = recencyColor(d.lastSync);
-    return `<tr onclick="goToDev('${escapeHtml(d.devId)}')">
-      <td><span class="rank-badge${rankCls}">${i + 1}</span></td>
-      <td style="font-weight:600">${escapeHtml(d.devId)}</td>
-      <td class="token-num">${fmtFull(d.totalSessions)}</td>
-      <td class="token-num">${fmtFull(d.totalQueries)}</td>
-      <td class="token-num" style="font-weight:700">${fmt(d.totalTokens)}</td>
-      <td class="token-num">${fmtCost(d.totalCost)}</td>
-      <td><div class="bar-track"><div class="bar-fill" style="width:${barPct}%;background:var(--indigo)"></div></div></td>
-      <td style="text-align:center"><span class="recency-dot" style="background:${rc}" title="Last sync: ${d.lastSync ? new Date(d.lastSync).toLocaleString() : 'never'}"></span></td>
-    </tr>`;
-  }).join('');
+// --- Productivity Tab ---
+function renderProductivity() {
+  const t = PROD_DATA.team;
+  const devs = PROD_DATA.developers.filter(d => d.sessions > 0);
+  const el = document.getElementById('content');
+
+  el.innerHTML = `
+    <div class="stats-row stats-row-5 animate delay-2">
+      ${[
+        {l:'Active Devs',v:t.devCount,s:t.activeDays+' active days'},
+        {l:'Avg Queries/Day',v:fmtFull(t.avgQueriesPerDay),s:fmtFull(t.totalQueries)+' total'},
+        {l:'Output Ratio',v:fmtPct(t.outputRatio),s:'of tokens are output'},
+        {l:'Cache Hit Rate',v:fmtPct(t.cacheHitRate),s:'input tokens from cache'},
+        {l:'Avg Cost/Dev',v:fmtCost(t.avgCostPerDev),s:fmtCost(t.totalCost)+' total'},
+      ].map(c => `<div class="stat-card"><div class="stat-label">${c.l}</div><div class="stat-value">${c.v}</div><div class="stat-sub">${c.s}</div></div>`).join('')}
+    </div>
+    <div class="charts-grid animate delay-2" id="prodCharts"></div>
+    <div class="animate delay-3" id="prodTable"></div>
+    <div class="grid-2 animate delay-4" id="prodBottom"></div>
+  `;
+
+  // Charts
+  document.getElementById('prodCharts').innerHTML = `
+    <div class="chart-card"><h3>Team Daily Activity</h3><canvas id="teamDailyChart"></canvas>
+      <div class="legend"><div class="legend-item"><div class="legend-dot" style="background:var(--indigo)"></div>Queries</div><div class="legend-item"><div class="legend-dot" style="background:var(--teal)"></div>Active Devs</div></div>
+    </div>
+    <div class="chart-card"><h3>Model Breakdown</h3><canvas id="teamModelChart"></canvas>
+      <div id="teamModelLegend" class="legend" style="flex-direction:column;gap:10px;margin-top:16px"></div>
+    </div>
+  `;
+  setTimeout(() => {
+    renderBarChart('teamDailyChart', PROD_DATA.dailyTrend, 'queries');
+    renderDonut('teamModelChart', 'teamModelLegend', PROD_DATA.modelBreakdown.reduce((m, x) => { m[x.model] = {tokens:x.tokens,cost:x.cost,queries:x.queries}; return m; }, {}));
+  }, 50);
+
+  // Developer productivity table
+  if (devs.length) {
+    const maxQ = Math.max(...devs.map(d => d.queries), 1);
+    document.getElementById('prodTable').innerHTML = `
+      <div class="section-header">
+        <div class="section-icon" style="background:linear-gradient(135deg,#E0E7FF,#C7D2FE)"><svg viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="2.5" stroke-linecap="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg></div>
+        <div class="section-title">Developer Productivity</div>
+      </div>
+      <div class="table-card"><table class="prod-table">
+        <thead><tr><th>Developer</th><th style="text-align:right">Sessions</th><th style="text-align:right">Queries</th><th style="text-align:right">Depth</th><th style="text-align:right">Tools</th><th style="text-align:right">Cache</th><th style="text-align:right">Cost</th><th>Activity</th><th>Streak</th><th>Trend</th></tr></thead>
+        <tbody>${devs.map(d => `<tr onclick="goToDev('${esc(d.devId)}')">
+          <td class="dev-name">${esc(d.devId)}</td>
+          <td class="token-num">${fmtFull(d.sessions)}</td>
+          <td class="token-num">${fmtFull(d.queries)}</td>
+          <td class="token-num">${d.avgSessionDepth}</td>
+          <td class="token-num">${d.toolActivationRate}%</td>
+          <td class="token-num">${fmtPct(d.cacheHitRate)}</td>
+          <td class="token-num">${fmtCost(d.cost)}</td>
+          <td><div class="bar-track" style="width:80px"><div class="bar-fill" style="width:${(d.queries/maxQ*100).toFixed(1)}%;background:var(--indigo)"></div></div></td>
+          <td class="token-num">${d.streak}d</td>
+          <td>${trendBadge(d.trend)}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    `;
+  }
+
+  // Bottom: tools + projects
+  let bottomHtml = '';
+  if (PROD_DATA.toolBreakdown.length) {
+    const maxTC = PROD_DATA.toolBreakdown[0].count;
+    bottomHtml += `<div class="chart-card"><h3>Top Tools (Team)</h3>
+      ${PROD_DATA.toolBreakdown.slice(0,12).map((t,i) => `<div class="tool-row"><span class="tool-name">${esc(t.tool)}</span><div class="bar-track" style="flex:1"><div class="bar-fill" style="width:${(t.count/maxTC*100).toFixed(1)}%;background:${COLORS[i%COLORS.length]}"></div></div><span class="tool-count">${fmt(t.count)}</span></div>`).join('')}
+    </div>`;
+  }
+  if (PROD_DATA.projectBreakdown.length) {
+    bottomHtml += `<div class="chart-card"><h3>Projects</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr><th style="padding:6px 0;border-bottom:1px solid var(--border)">Project</th><th style="text-align:right;padding:6px 0;border-bottom:1px solid var(--border)">Sessions</th><th style="text-align:right;padding:6px 0;border-bottom:1px solid var(--border)">Cost</th><th style="text-align:right;padding:6px 0;border-bottom:1px solid var(--border)">Devs</th></tr></thead>
+        <tbody>${PROD_DATA.projectBreakdown.slice(0,10).map(p => `<tr style="cursor:default"><td style="padding:6px 0;border-bottom:1px solid var(--border)"><span class="proj-name">${esc(projShort(p.project))}</span></td><td style="padding:6px 0;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono)">${fmtFull(p.sessions)}</td><td style="padding:6px 0;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono)">${fmtCost(p.cost)}</td><td style="padding:6px 0;border-bottom:1px solid var(--border);text-align:right">${p.devCount}</td></tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+  }
+  document.getElementById('prodBottom').innerHTML = bottomHtml;
 }
 
 // --- Dev Detail View ---
 async function renderDevView(app) {
+  const devProd = PROD_DATA.developers.find(d => d.devId === selectedDev);
+  if (!devProd) { app.innerHTML = '<p>Developer not found</p>'; return; }
+
   app.innerHTML = `
     <div class="header animate">
       <div class="header-left">
-        <div class="logo-mark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        </div>
-        <h1>${escapeHtml(selectedDev)}</h1>
+        <div class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+        <h1>${esc(selectedDev)}</h1>
       </div>
-      <div class="header-right">
-        <button class="btn" onclick="goToLeaderboard()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
-          Back to Leaderboard
-        </button>
-      </div>
+      <div class="header-right"><button class="btn" onclick="goBack()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>Back</button></div>
     </div>
     <div class="date-bar animate delay-1" id="dateBar"></div>
-    <div id="devContent"><div class="loading" style="min-height:200px"><div class="spinner"></div></div></div>
+    <div id="devKpis" class="animate delay-1"></div>
+    <div id="devCharts" class="charts-grid animate delay-2"></div>
+    <div id="devROI" class="grid-2 animate delay-3"></div>
+    <div id="devBottom" class="grid-2 animate delay-4"></div>
+    <div id="devSessions" class="animate delay-4"></div>
+    <div class="footer">Made with <a href="https://claude.ai/code" target="_blank">Claude Code</a> by <a href="https://www.linkedin.com/in/writetoaniketparihar/" target="_blank">Aniket</a></div>
   `;
-
   renderDateBar();
 
-  try {
-    const devData = await fetchDevDetail(selectedDev);
-    renderDevContent(devData);
-  } catch (e) {
-    document.getElementById('devContent').innerHTML =
-      '<div class="empty-state"><h3>Failed to load</h3><p>' + escapeHtml(e.message) + '</p></div>';
-  }
-}
+  const d = devProd;
+  const health = computeHealth(d);
+  const hColor = health >= 70 ? 'var(--emerald)' : health >= 40 ? 'var(--amber)' : 'var(--rose)';
+  const hLabel = health >= 70 ? 'Excellent' : health >= 40 ? 'Good' : 'Needs Attention';
 
-function renderDevContent(dev) {
-  const sessions = dev.sessions || [];
-  const totals = dev.totals || {};
-  const daily = dev.dailyUsage || [];
-
-  // Aggregate tools and models from lite sessions
-  const toolMap = {};
-  const modelMap = {};
-  const projectMap = {};
-  let sessionsWithTools = 0;
-
-  for (const s of sessions) {
-    if (s._hasToolCall) sessionsWithTools++;
-    for (const [tool, count] of Object.entries(s._tools || {})) {
-      toolMap[tool] = (toolMap[tool] || 0) + count;
-    }
-    for (const [model, info] of Object.entries(s._models || {})) {
-      if (!modelMap[model]) modelMap[model] = { queries: 0, tokens: 0, cost: 0 };
-      modelMap[model].queries += info.queries;
-      modelMap[model].tokens += info.tokens;
-      modelMap[model].cost += info.cost;
-    }
-    const proj = s.project || 'unknown';
-    if (!projectMap[proj]) projectMap[proj] = { sessions: 0, queries: 0, tokens: 0, cost: 0 };
-    projectMap[proj].sessions++;
-    projectMap[proj].queries += s.queryCount || 0;
-    projectMap[proj].tokens += s.totalTokens || 0;
-    projectMap[proj].cost += s.cost || 0;
-  }
-
-  const avgQueriesPerSession = sessions.length > 0 ? Math.round(totals.totalQueries / sessions.length) : 0;
-  const avgTokensPerQuery = totals.totalQueries > 0 ? Math.round(totals.totalTokens / totals.totalQueries) : 0;
-  const activeDays = new Set(daily.map(d => d.date)).size;
-
-  const content = document.getElementById('devContent');
-  content.innerHTML = `
-    <div class="kpi-grid animate delay-2" id="kpiGrid"></div>
-    <div class="charts-grid animate delay-3" id="devCharts"></div>
-    <div class="grid-2 animate delay-4" id="devMiddle"></div>
-    <div id="devSessions" class="animate delay-4"></div>
-    <div class="footer">Made with <a href="https://claude.ai/code" target="_blank">Claude Code</a> and &#10084; by <a href="https://www.linkedin.com/in/writetoaniketparihar/" target="_blank">Aniket</a></div>
+  // KPIs - 2 rows
+  document.getElementById('devKpis').innerHTML = `
+    <div class="stats-row" style="margin-bottom:16px">
+      ${[{l:'Sessions',v:fmtFull(d.sessions),s:d.activeDays+' active days'},{l:'Queries',v:fmtFull(d.queries),s:d.avgQueriesPerSession+' per session'},{l:'Total Tokens',v:fmt(d.totalTokens),s:fmt(d.avgTokensPerQuery)+' per query'},{l:'Cost',v:fmtCost(d.cost),s:fmtCost(d.cost/Math.max(1,d.sessions))+' per session'}].map(c=>`<div class="stat-card"><div class="stat-label">${c.l}</div><div class="stat-value">${c.v}</div><div class="stat-sub">${c.s}</div></div>`).join('')}
+    </div>
+    <div class="stats-row stats-row-5">
+      <div class="stat-card"><div class="stat-label">Session Depth</div><div class="stat-value">${d.avgSessionDepth}</div><div class="stat-sub">queries per session</div></div>
+      <div class="stat-card"><div class="stat-label">Tool Activation</div><div class="stat-value">${d.toolActivationRate}%</div><div class="stat-sub">${d.uniqueTools} unique tools</div></div>
+      <div class="stat-card"><div class="stat-label">Cache Hit Rate</div><div class="stat-value">${fmtPct(d.cacheHitRate)}</div><div class="stat-sub">${fmt(d.cacheReadTokens)} cached</div></div>
+      <div class="stat-card"><div class="stat-label">Streak</div><div class="stat-value">${d.streak}d</div><div class="stat-sub">${trendBadge(d.trend)}</div></div>
+      <div class="stat-card"><div class="stat-label">Health Score</div><div style="display:flex;align-items:center;gap:12px;margin-top:4px"><div class="health-ring" style="border:3px solid ${hColor};color:${hColor}">${Math.round(health)}</div><span style="font-size:13px;font-weight:600;color:${hColor}">${hLabel}</span></div></div>
+    </div>
   `;
 
-  // KPIs
-  document.getElementById('kpiGrid').innerHTML = [
-    { label: 'Sessions', value: fmtFull(sessions.length), sub: activeDays + ' active days' },
-    { label: 'Queries', value: fmtFull(totals.totalQueries || 0), sub: avgQueriesPerSession + ' per session avg' },
-    { label: 'Tokens', value: fmt(totals.totalTokens || 0), sub: fmt(avgTokensPerQuery) + ' per query avg' },
-    { label: 'Cost', value: fmtCost(totals.totalCost || 0), sub: fmtCost((totals.totalCost || 0) / Math.max(1, sessions.length)) + ' per session' },
-    { label: 'Tool Activation', value: sessions.length > 0 ? Math.round(sessionsWithTools / sessions.length * 100) + '%' : '0%', sub: sessionsWithTools + ' of ' + sessions.length + ' sessions' },
-    { label: 'Cache Hit Rate', value: totals.totalInputTokens > 0 ? Math.round((totals.totalCacheReadTokens || 0) / ((totals.totalInputTokens || 0) + (totals.totalCacheReadTokens || 0)) * 100) + '%' : '-', sub: fmt(totals.totalCacheReadTokens || 0) + ' cached tokens' },
-  ].map((c, i) => `
-    <div class="stat-card">
-      <div class="stat-label">${c.label}</div>
-      <div class="stat-value">${c.value}</div>
-      <div class="stat-sub">${c.sub}</div>
-    </div>
-  `).join('');
-
-  // Charts: daily + model donut
+  // Charts
   document.getElementById('devCharts').innerHTML = `
-    <div class="chart-card">
-      <h3>Daily Activity</h3>
-      <canvas id="devDailyChart"></canvas>
-    </div>
-    <div class="chart-card">
-      <h3>By Model</h3>
-      <canvas id="devModelChart"></canvas>
-      <div id="devModelLegend" class="legend" style="flex-direction:column;gap:12px;margin-top:20px"></div>
-    </div>
+    <div class="chart-card"><h3>Daily Activity</h3><canvas id="devDailyChart"></canvas></div>
+    <div class="chart-card"><h3>Model Usage</h3><canvas id="devModelChart"></canvas><div id="devModelLegend" class="legend" style="flex-direction:column;gap:10px;margin-top:16px"></div></div>
   `;
-
   setTimeout(() => {
-    renderBarChart('devDailyChart', daily);
-    renderDonut('devModelChart', 'devModelLegend', modelMap);
+    renderBarChart('devDailyChart', d.dailyBreakdown, 'queries');
+    renderDonut('devModelChart', 'devModelLegend', d.modelUsage);
   }, 50);
 
-  // Middle: tools + projects
-  let middleHtml = '';
-  const toolEntries = Object.entries(toolMap).sort((a, b) => b[1] - a[1]);
-  if (toolEntries.length > 0) {
-    const maxTC = toolEntries[0][1];
-    const COLORS = ['#6366F1','#10B981','#F59E0B','#F43F5E','#3B82F6','#EC4899','#06B6D4','#8B5CF6','#F97316','#14B8A6'];
-    middleHtml += `<div class="chart-card"><h3>Top Tools</h3>
-      ${toolEntries.slice(0, 12).map(([tool, count], i) => `
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-          <span style="width:140px;font-size:12px;color:var(--text-secondary);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(tool)}</span>
-          <div class="bar-track" style="flex:1"><div class="bar-fill" style="width:${(count/maxTC*100).toFixed(1)}%;background:${COLORS[i%COLORS.length]}"></div></div>
-          <span style="width:50px;font-size:12px;font-weight:600;text-align:right;font-family:var(--mono)">${fmt(count)}</span>
-        </div>
-      `).join('')}
+  // ROI Signals + Tools
+  const roi = computeROI(d);
+  let roiHtml = `<div class="chart-card"><h3>ROI Signals</h3>
+    ${roi.map(m => {
+      const c = m.score >= 70 ? 'var(--emerald)' : m.score >= 40 ? 'var(--amber)' : 'var(--rose)';
+      return `<div class="roi-row"><span class="roi-label">${m.label}</span><div class="roi-track"><div class="roi-fill" style="width:${m.score}%;background:${c}"></div></div><span class="roi-value" style="color:${c}">${Math.round(m.score)}</span></div>`;
+    }).join('')}
+  </div>`;
+
+  let toolsHtml = '';
+  if (d.topTools.length) {
+    const maxTC = d.topTools[0].count;
+    toolsHtml = `<div class="chart-card"><h3>Top Tools</h3>
+      ${d.topTools.slice(0,12).map((t,i) => `<div class="tool-row"><span class="tool-name">${esc(t.tool)}</span><div class="bar-track" style="flex:1"><div class="bar-fill" style="width:${(t.count/maxTC*100).toFixed(1)}%;background:${COLORS[i%COLORS.length]}"></div></div><span class="tool-count">${fmt(t.count)}</span></div>`).join('')}
     </div>`;
   }
+  document.getElementById('devROI').innerHTML = roiHtml + toolsHtml;
 
-  const projEntries = Object.entries(projectMap).sort((a, b) => b[1].tokens - a[1].tokens);
-  if (projEntries.length > 0) {
-    middleHtml += `<div class="chart-card"><h3>Projects</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr>
-          <th style="text-align:left;padding:8px 0;border-bottom:1px solid var(--border)">Project</th>
-          <th style="text-align:right;padding:8px 0;border-bottom:1px solid var(--border)">Sessions</th>
-          <th style="text-align:right;padding:8px 0;border-bottom:1px solid var(--border)">Cost</th>
-        </tr></thead>
-        <tbody>${projEntries.slice(0, 10).map(([proj, v]) => `
-          <tr>
-            <td style="padding:6px 0;border-bottom:1px solid var(--border)"><span class="proj-name" title="${escapeHtml(proj)}">${escapeHtml(projectShort(proj))}</span></td>
-            <td style="padding:6px 0;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);font-size:12px">${fmtFull(v.sessions)}</td>
-            <td style="padding:6px 0;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);font-size:12px">${fmtCost(v.cost)}</td>
-          </tr>
-        `).join('')}</tbody>
+  // Projects
+  const projEntries = Object.entries(d.projectUsage).sort((a,b) => b[1].tokens - a[1].tokens);
+  let bottomHtml = '';
+  if (projEntries.length) {
+    bottomHtml += `<div class="chart-card"><h3>Projects</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr><th style="padding:6px 0;border-bottom:1px solid var(--border)">Project</th><th style="text-align:right;padding:6px 0;border-bottom:1px solid var(--border)">Sessions</th><th style="text-align:right;padding:6px 0;border-bottom:1px solid var(--border)">Queries</th><th style="text-align:right;padding:6px 0;border-bottom:1px solid var(--border)">Cost</th></tr></thead>
+        <tbody>${projEntries.slice(0,10).map(([p,v]) => `<tr style="cursor:default"><td style="padding:6px 0;border-bottom:1px solid var(--border)"><span class="proj-name">${esc(projShort(p))}</span></td><td style="padding:6px 0;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono)">${fmtFull(v.sessions)}</td><td style="padding:6px 0;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono)">${fmtFull(v.queries)}</td><td style="padding:6px 0;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono)">${fmtCost(v.cost)}</td></tr>`).join('')}</tbody>
       </table>
     </div>`;
   }
-  document.getElementById('devMiddle').innerHTML = middleHtml;
+  document.getElementById('devBottom').innerHTML = bottomHtml;
 
-  // Recent sessions
-  const recent = [...sessions].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 25);
-  if (recent.length > 0) {
-    document.getElementById('devSessions').innerHTML = `
-      <div class="section-header">
-        <div class="section-icon" style="background:linear-gradient(135deg,#ECFDF5,#D1FAE5)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg>
-        </div>
-        <div class="section-title">Recent Sessions</div>
-      </div>
-      <div class="table-card">
-        <table>
-          <thead><tr>
-            <th>Date</th><th>Project</th><th style="text-align:right">Queries</th>
-            <th style="text-align:right">Tokens</th><th style="text-align:right">Cost</th><th>Model</th>
-          </tr></thead>
-          <tbody>${recent.map(s => {
-            const topModel = s._models ? Object.entries(s._models).sort((a, b) => b[1].tokens - a[1].tokens)[0] : null;
-            const mn = topModel ? topModel[0] : '';
-            return `<tr>
-              <td style="white-space:nowrap;color:var(--text-secondary);font-weight:500;font-size:13px">${formatDate(s.date || '')}</td>
-              <td><span class="proj-name" style="font-size:12px">${escapeHtml(projectShort(s.project || 'unknown'))}</span></td>
-              <td class="token-num">${s.queryCount || 0}</td>
-              <td class="token-num" style="font-weight:700">${fmt(s.totalTokens || 0)}</td>
-              <td class="token-num">${fmtCost(s.cost || 0)}</td>
-              <td>${mn ? '<span class="model-badge ' + modelClass(mn) + '"><span class="model-dot"></span>' + modelShort(mn) + '</span>' : '-'}</td>
-            </tr>`;
+  // Recent sessions via lite endpoint
+  try {
+    const dp = getDateParams();
+    const sep = dp ? '&' : '';
+    const res = await fetch('/api/team/dev/' + encodeURIComponent(selectedDev) + '?lite=1' + sep + dp);
+    const devData = await res.json();
+    const sessions = [...(devData.sessions||[])].sort((a,b) => (b.date||'').localeCompare(a.date||'')).slice(0, 20);
+    if (sessions.length) {
+      document.getElementById('devSessions').innerHTML = `
+        <div class="section-header"><div class="section-icon" style="background:linear-gradient(135deg,#ECFDF5,#D1FAE5)"><svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg></div><div class="section-title">Recent Sessions</div></div>
+        <div class="table-card"><table>
+          <thead><tr><th>Date</th><th>Project</th><th style="text-align:right">Queries</th><th style="text-align:right">Tokens</th><th style="text-align:right">Cost</th><th>Model</th></tr></thead>
+          <tbody>${sessions.map(s => {
+            const tm = s._models ? Object.entries(s._models).sort((a,b) => b[1].tokens - a[1].tokens)[0] : null;
+            return `<tr style="cursor:default"><td style="white-space:nowrap;color:var(--text-secondary);font-weight:500;font-size:12px">${formatDate(s.date||'')}</td><td><span class="proj-name">${esc(projShort(s.project||'unknown'))}</span></td><td class="token-num">${s.queryCount||0}</td><td class="token-num" style="font-weight:700">${fmt(s.totalTokens||0)}</td><td class="token-num">${fmtCost(s.cost||0)}</td><td>${tm?'<span class="model-badge '+modelClass(tm[0])+'"><span class="model-dot"></span>'+modelShort(tm[0])+'</span>':'-'}</td></tr>`;
           }).join('')}</tbody>
-        </table>
-      </div>
-    `;
-  }
+        </table></div>
+      `;
+    }
+  } catch {}
+}
+
+// --- Analytics ---
+function computeHealth(d) {
+  const qDepth = Math.min(20, (d.avgQueriesPerSession / 10) * 20);
+  const toolAct = Math.min(20, (d.toolActivationRate / 100) * 20);
+  const toolDiv = Math.min(15, (d.uniqueTools / 10) * 15);
+  const cache = Math.min(20, (d.cacheHitRate / 50) * 20);
+  const modelCount = Object.keys(d.modelUsage).length;
+  const modelDisc = modelCount <= 2 ? 10 : modelCount <= 4 ? 7 : 4;
+  const consist = Math.min(15, (d.activeDays / 30) * 15);
+  return qDepth + toolAct + toolDiv + cache + modelDisc + consist;
+}
+
+function computeROI(d) {
+  return [
+    { label: 'Query Depth', score: Math.min(100, (d.avgQueriesPerSession / 15) * 100) },
+    { label: 'Tool Activation', score: Math.min(100, d.toolActivationRate) },
+    { label: 'Cache Leverage', score: Math.min(100, d.cacheHitRate * 2) },
+    { label: 'Consistency', score: Math.min(100, (d.activeDays / 30) * 100) },
+    { label: 'Cost Efficiency', score: Math.min(100, Math.max(0, d.queries > 0 ? (1 - (d.cost / d.queries) / 0.10) * 100 : 0)) },
+    { label: 'Model Discipline', score: Object.keys(d.modelUsage).length <= 2 ? 100 : Object.keys(d.modelUsage).length <= 4 ? 70 : 40 },
+  ];
 }
 
 // --- Chart rendering ---
-function renderBarChart(canvasId, daily) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas || !daily.length) return;
+function renderBarChart(id, daily, field) {
+  const canvas = document.getElementById(id);
+  if (!canvas || !daily || !daily.length) return;
   const ctx = canvas.getContext('2d');
-
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.parentElement.clientWidth - 48;
-  const h = 200;
+  const h = 180;
   canvas.width = w * dpr; canvas.height = h * dpr;
   canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, w, h);
+  ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
 
-  const maxQ = Math.max(...daily.map(d => d.queries));
-  const barW = Math.max(6, Math.min(28, (w - 52) / daily.length - 3));
-  const gap = 3;
-  const chartH = h - 36;
-  const startX = 48;
+  const vals = daily.map(d => d[field] || d.queries || 0);
+  const maxV = Math.max(...vals, 1);
+  const barW = Math.max(4, Math.min(24, (w - 52) / daily.length - 2));
+  const gap = 2; const chartH = h - 32; const startX = 44;
 
-  // Grid
-  ctx.font = '500 10px Inter, system-ui';
-  ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'right';
+  ctx.font = '500 9px Inter, system-ui'; ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'right';
   for (let i = 0; i <= 4; i++) {
-    const val = (maxQ / 4) * i;
+    const val = (maxV / 4) * i;
     const y = chartH - (chartH * i / 4) + 8;
-    ctx.fillText(fmt(val), startX - 10, y + 3);
+    ctx.fillText(fmt(val), startX - 8, y + 3);
     ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(startX, y); ctx.lineTo(w, y); ctx.stroke();
   }
 
-  // Bars
   const grad = ctx.createLinearGradient(0, chartH + 8, 0, 0);
   grad.addColorStop(0, '#818CF8'); grad.addColorStop(1, '#6366F1');
 
   daily.forEach((d, i) => {
     const x = startX + i * (barW + gap);
-    const barH = Math.max(2, (d.queries / maxQ) * chartH);
-    const y = chartH + 8 - barH;
-    const r = Math.min(4, barW / 2);
+    const bH = Math.max(2, (vals[i] / maxV) * chartH);
     ctx.fillStyle = grad;
-    ctx.beginPath(); roundedRect(ctx, x, y, barW, barH, r); ctx.fill();
+    ctx.beginPath(); roundedRect(ctx, x, chartH + 8 - bH, barW, bH, Math.min(3, barW/2)); ctx.fill();
   });
 
-  // X labels
-  ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'center';
-  ctx.font = '500 10px Inter, system-ui';
+  ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'center'; ctx.font = '500 9px Inter, system-ui';
   const step = Math.max(1, Math.floor(daily.length / 7));
   daily.forEach((d, i) => {
-    if (i % step === 0 || i === daily.length - 1) {
-      ctx.fillText(formatDate(d.date), startX + i * (barW + gap) + barW / 2, chartH + 24);
-    }
+    if (i % step === 0 || i === daily.length - 1)
+      ctx.fillText(formatDate(d.date), startX + i * (barW + gap) + barW / 2, chartH + 22);
   });
 }
 
 function renderDonut(canvasId, legendId, modelMap) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const entries = Object.entries(modelMap).sort((a, b) => b[1].tokens - a[1].tokens);
+  const entries = Object.entries(modelMap).sort((a,b) => b[1].tokens - a[1].tokens);
   if (!entries.length) return;
-
+  const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
-  const size = Math.min(180, canvas.parentElement.clientWidth - 48);
+  const size = Math.min(160, canvas.parentElement.clientWidth - 48);
   canvas.width = size * dpr; canvas.height = size * dpr;
   canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
   ctx.scale(dpr, dpr);
-
-  const cx = size/2, cy = size/2, r = size/2 - 6, innerR = r * 0.6;
-  const total = entries.reduce((s, [,v]) => s + v.tokens, 0);
-
+  const cx = size/2, cy = size/2, r = size/2 - 6, ir = r * 0.6;
+  const total = entries.reduce((s,[,v]) => s + v.tokens, 0);
   let angle = -Math.PI / 2;
   entries.forEach(([model, v]) => {
     const sa = (v.tokens / total) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, angle, angle + sa);
-    ctx.arc(cx, cy, innerR, angle + sa, angle, true);
-    ctx.closePath();
-    ctx.fillStyle = getModelColor(model);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy, r, angle, angle + sa); ctx.arc(cx, cy, ir, angle + sa, angle, true); ctx.closePath();
+    ctx.fillStyle = getModelColor(model); ctx.fill();
     ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2; ctx.stroke();
     angle += sa;
   });
-
   ctx.fillStyle = '#0F172A'; ctx.textAlign = 'center';
-  ctx.font = '800 17px Inter, system-ui';
-  ctx.fillText(fmt(total), cx, cy + 2);
-  ctx.font = '500 10px Inter, system-ui';
-  ctx.fillStyle = '#94A3B8';
-  ctx.fillText('tokens', cx, cy + 16);
+  ctx.font = '800 16px Inter, system-ui'; ctx.fillText(fmt(total), cx, cy + 2);
+  ctx.font = '500 9px Inter, system-ui'; ctx.fillStyle = '#94A3B8'; ctx.fillText('tokens', cx, cy + 14);
 
-  document.getElementById(legendId).innerHTML = entries.map(([model, v]) => {
+  const leg = document.getElementById(legendId);
+  if (leg) leg.innerHTML = entries.map(([model, v]) => {
     const pct = ((v.tokens / total) * 100).toFixed(1);
-    return `<div class="legend-item">
-      <div class="legend-dot" style="background:${getModelColor(model)}"></div>
-      <span><strong>${modelShort(model)}</strong> &ndash; ${fmt(v.tokens)} (${pct}%) &middot; ${fmtCost(v.cost)}</span>
-    </div>`;
+    return `<div class="legend-item"><div class="legend-dot" style="background:${getModelColor(model)}"></div><span><strong>${modelShort(model)}</strong> ${fmt(v.tokens)} (${pct}%) ${fmtCost(v.cost)}</span></div>`;
   }).join('');
 }
 
 function roundedRect(ctx, x, y, w, h, r) {
   if (h <= 0) return;
-  r = Math.min(r, h / 2, w / 2);
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
+  r = Math.min(r, h/2, w/2);
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
 }
 
-// --- Init ---
-loadAndRender();
+// Init
+loadData();
 </script>
 </body>
 </html>
