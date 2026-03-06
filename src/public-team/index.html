@@ -1197,8 +1197,8 @@ function renderHeatmap(canvasId, dailyData, isTeam) {
   const tooltip = document.getElementById('heatmapTooltip');
   canvas.onmousemove = (e) => {
     const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (canvas.width / dpr) / rect.width / dpr;
-    const my = (e.clientY - rect.top) * (canvas.height / dpr) / rect.height / dpr;
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width) / dpr;
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height) / dpr;
     let found = null;
     for (const ha of hitAreas) {
       if (mx >= ha.x && mx <= ha.x + ha.w && my >= ha.y && my <= ha.y + ha.h) { found = ha; break; }
@@ -1614,7 +1614,7 @@ function setupChartTooltip(canvas, data, startX, barW, gap, chartH, formatFn) {
   const dpr = window.devicePixelRatio || 1;
   canvas.onmousemove = (e) => {
     const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (canvas.width / dpr) / rect.width / dpr;
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width) / dpr;
     const idx = Math.floor((mx - startX) / (barW + gap));
     if (idx >= 0 && idx < data.length) {
       tooltip.innerHTML = formatFn(data[idx], idx);
