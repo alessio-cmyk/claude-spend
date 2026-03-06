@@ -1,8 +1,10 @@
 const http = require('http');
 const https = require('https');
 
-async function syncToTeam(serverUrl, devId, parsedData) {
-  const payload = JSON.stringify({ devId, data: parsedData });
+async function syncToTeam(serverUrl, devId, parsedData, apiKey) {
+  const body = { devId, data: parsedData };
+  if (apiKey) body.key = apiKey;
+  const payload = JSON.stringify(body);
   const url = new URL('/api/team/sync', serverUrl);
   const transport = url.protocol === 'https:' ? https : http;
 
@@ -31,4 +33,26 @@ async function syncToTeam(serverUrl, devId, parsedData) {
   });
 }
 
-module.exports = { syncToTeam };
+async function resolveDevId(serverUrl, apiKey) {
+  const url = new URL('/api/team/whoami?key=' + encodeURIComponent(apiKey), serverUrl);
+  const transport = url.protocol === 'https:' ? https : http;
+
+  return new Promise((resolve, reject) => {
+    const req = transport.request(url, { method: 'GET' }, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(body);
+          if (res.statusCode >= 400) reject(new Error(json.error || 'Server error ' + res.statusCode));
+          else resolve(json);
+        } catch { reject(new Error('Invalid response from server')); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(10000, () => { req.destroy(); reject(new Error('Request timed out')); });
+    req.end();
+  });
+}
+
+module.exports = { syncToTeam, resolveDevId };

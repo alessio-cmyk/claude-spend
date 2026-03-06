@@ -30,57 +30,63 @@ function getProductivityAnalytics(fromDate, toDate) {
     }
 
     const totals = computeTotals(sessions);
-    const allQueries = sessions.flatMap(s => s.queries || []);
 
     // Daily breakdown
     const dailyMap = {};
     for (const s of sessions) {
       if (!s.date || s.date === 'unknown') continue;
-      if (!dailyMap[s.date]) dailyMap[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0, outputTokens: 0 };
+      if (!dailyMap[s.date]) dailyMap[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0, outputTokens: 0, inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
       dailyMap[s.date].tokens += s.totalTokens || 0;
       dailyMap[s.date].cost += s.cost || 0;
       dailyMap[s.date].sessions += 1;
       dailyMap[s.date].queries += s.queryCount || 0;
       dailyMap[s.date].outputTokens += s.outputTokens || 0;
+      dailyMap[s.date].inputTokens += s.inputTokens || 0;
+      dailyMap[s.date].cacheReadTokens += s.cacheReadTokens || 0;
+      dailyMap[s.date].cacheCreationTokens += s.cacheCreationTokens || 0;
 
       // Team daily
-      if (!teamDaily[s.date]) teamDaily[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0, activeDevs: new Set() };
+      if (!teamDaily[s.date]) teamDaily[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0, activeDevs: new Set(), inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
       teamDaily[s.date].tokens += s.totalTokens || 0;
       teamDaily[s.date].cost += s.cost || 0;
       teamDaily[s.date].sessions += 1;
       teamDaily[s.date].queries += s.queryCount || 0;
       teamDaily[s.date].activeDevs.add(dev.devId);
+      teamDaily[s.date].inputTokens += s.inputTokens || 0;
+      teamDaily[s.date].outputTokens += s.outputTokens || 0;
+      teamDaily[s.date].cacheReadTokens += s.cacheReadTokens || 0;
+      teamDaily[s.date].cacheCreationTokens += s.cacheCreationTokens || 0;
     }
 
-    // Model usage
+    // Model usage (from pre-aggregated _models or fallback to queries[])
     const modelUsage = {};
-    for (const q of allQueries) {
-      if (!q.model || q.model === '<synthetic>' || q.model === 'unknown') continue;
-      if (!modelUsage[q.model]) modelUsage[q.model] = { queries: 0, tokens: 0, cost: 0 };
-      modelUsage[q.model].queries += 1;
-      modelUsage[q.model].tokens += q.totalTokens || 0;
-      modelUsage[q.model].cost += q.cost || 0;
+    for (const s of sessions) {
+      const models = s._models || {};
+      for (const [m, v] of Object.entries(models)) {
+        if (!modelUsage[m]) modelUsage[m] = { queries: 0, tokens: 0, cost: 0 };
+        modelUsage[m].queries += v.queries || 0;
+        modelUsage[m].tokens += v.tokens || 0;
+        modelUsage[m].cost += v.cost || 0;
 
-      if (!teamModels[q.model]) teamModels[q.model] = { queries: 0, tokens: 0, cost: 0, devs: new Set() };
-      teamModels[q.model].queries += 1;
-      teamModels[q.model].tokens += q.totalTokens || 0;
-      teamModels[q.model].cost += q.cost || 0;
-      teamModels[q.model].devs.add(dev.devId);
+        if (!teamModels[m]) teamModels[m] = { queries: 0, tokens: 0, cost: 0, devs: new Set() };
+        teamModels[m].queries += v.queries || 0;
+        teamModels[m].tokens += v.tokens || 0;
+        teamModels[m].cost += v.cost || 0;
+        teamModels[m].devs.add(dev.devId);
+      }
     }
 
-    // Tool usage
+    // Tool usage (from pre-aggregated _tools or fallback to queries[])
     const toolUsage = {};
     let sessionsWithTools = 0;
     for (const s of sessions) {
-      let sessionHasTools = false;
-      for (const q of (s.queries || [])) {
-        for (const t of (q.tools || [])) {
-          toolUsage[t] = (toolUsage[t] || 0) + 1;
-          teamTools[t] = (teamTools[t] || 0) + 1;
-          sessionHasTools = true;
-        }
+      const tools = s._tools || {};
+      const hasTools = s._hasToolCall !== undefined ? s._hasToolCall : Object.keys(tools).length > 0;
+      for (const [t, count] of Object.entries(tools)) {
+        toolUsage[t] = (toolUsage[t] || 0) + count;
+        teamTools[t] = (teamTools[t] || 0) + count;
       }
-      if (sessionHasTools) sessionsWithTools++;
+      if (hasTools) sessionsWithTools++;
     }
 
     // Project usage
@@ -111,6 +117,7 @@ function getProductivityAnalytics(fromDate, toDate) {
     const cacheHitRate = totalInput > 0 ? (totals.totalCacheReadTokens || 0) / totalInput : 0;
 
     // Streak: consecutive active days ending at most recent day
+    // Weekends (Sat/Sun) don't break streaks — count them if active, skip if inactive
     const sortedDays = Object.keys(dailyMap).sort();
     let streak = 0;
     if (sortedDays.length > 0) {
@@ -119,8 +126,18 @@ function getProductivityAnalytics(fromDate, toDate) {
         const curr = new Date(sortedDays[i]);
         const prev = new Date(sortedDays[i - 1]);
         const diffDays = (curr - prev) / 86400000;
-        if (diffDays <= 1) streak++;
-        else break;
+        if (diffDays <= 1) { streak++; }
+        else {
+          // Check if gap only contains weekend days
+          let onlyWeekends = true;
+          for (let d = 1; d < diffDays; d++) {
+            const between = new Date(prev.getTime() + d * 86400000);
+            const dow = between.getDay();
+            if (dow !== 0 && dow !== 6) { onlyWeekends = false; break; }
+          }
+          if (onlyWeekends) streak++;
+          else break;
+        }
       }
     }
 
@@ -212,4 +229,126 @@ function getProductivityAnalytics(fromDate, toDate) {
   };
 }
 
-module.exports = { getProductivityAnalytics };
+/* === FEATURE 2a: Week-over-Week Delta Computation === */
+function getWeekOverWeekDeltas() {
+  const allDevs = loadAllDevelopers();
+
+  // Get current ISO week boundaries (Mon-Sun)
+  const now = new Date();
+  const dayOfWeek = now.getDay() || 7; // Mon=1..Sun=7
+  const thisMonday = new Date(now);
+  thisMonday.setDate(now.getDate() - dayOfWeek + 1);
+  thisMonday.setHours(0, 0, 0, 0);
+  const thisSunday = new Date(thisMonday);
+  thisSunday.setDate(thisMonday.getDate() + 6);
+
+  const lastMonday = new Date(thisMonday);
+  lastMonday.setDate(thisMonday.getDate() - 7);
+  const lastSunday = new Date(thisMonday);
+  lastSunday.setDate(thisMonday.getDate() - 1);
+
+  const thisFrom = thisMonday.toISOString().split('T')[0];
+  const thisTo = thisSunday.toISOString().split('T')[0];
+  const lastFrom = lastMonday.toISOString().split('T')[0];
+  const lastTo = lastSunday.toISOString().split('T')[0];
+
+  function calcPct(current, previous) {
+    if (previous === 0 && current > 0) return 100;
+    if (previous === 0 && current === 0) return 0;
+    return Math.round(((current - previous) / previous) * 1000) / 10;
+  }
+
+  const devDeltas = {};
+  let teamThisQueries = 0, teamLastQueries = 0;
+  let teamThisSessions = 0, teamLastSessions = 0;
+  let teamThisCost = 0, teamLastCost = 0;
+  let devsMoreActive = 0;
+
+  for (const dev of allDevs) {
+    const sessions = dev.sessions || [];
+    const thisWeek = filterSessions(sessions, thisFrom, thisTo);
+    const lastWeek = filterSessions(sessions, lastFrom, lastTo);
+
+    const thisTotals = computeTotals(thisWeek);
+    const lastTotals = computeTotals(lastWeek);
+
+    // Cache hit rate
+    const thisInput = (thisTotals.totalInputTokens || 0) + (thisTotals.totalCacheReadTokens || 0) + (thisTotals.totalCacheCreationTokens || 0);
+    const lastInput = (lastTotals.totalInputTokens || 0) + (lastTotals.totalCacheReadTokens || 0) + (lastTotals.totalCacheCreationTokens || 0);
+    const thisCacheRate = thisInput > 0 ? Math.round((thisTotals.totalCacheReadTokens || 0) / thisInput * 1000) / 10 : 0;
+    const lastCacheRate = lastInput > 0 ? Math.round((lastTotals.totalCacheReadTokens || 0) / lastInput * 1000) / 10 : 0;
+
+    devDeltas[dev.devId] = {
+      queries: { current: thisTotals.totalQueries, previous: lastTotals.totalQueries, delta: thisTotals.totalQueries - lastTotals.totalQueries, pct: calcPct(thisTotals.totalQueries, lastTotals.totalQueries) },
+      sessions: { current: thisTotals.totalSessions, previous: lastTotals.totalSessions, delta: thisTotals.totalSessions - lastTotals.totalSessions, pct: calcPct(thisTotals.totalSessions, lastTotals.totalSessions) },
+      cost: { current: Math.round(thisTotals.totalCost * 100) / 100, previous: Math.round(lastTotals.totalCost * 100) / 100, delta: Math.round((thisTotals.totalCost - lastTotals.totalCost) * 100) / 100, pct: calcPct(thisTotals.totalCost, lastTotals.totalCost) },
+      cacheHitRate: { current: thisCacheRate, previous: lastCacheRate, delta: Math.round((thisCacheRate - lastCacheRate) * 10) / 10, pct: calcPct(thisCacheRate, lastCacheRate) },
+    };
+
+    teamThisQueries += thisTotals.totalQueries;
+    teamLastQueries += lastTotals.totalQueries;
+    teamThisSessions += thisTotals.totalSessions;
+    teamLastSessions += lastTotals.totalSessions;
+    teamThisCost += thisTotals.totalCost;
+    teamLastCost += lastTotals.totalCost;
+    if (thisTotals.totalQueries > lastTotals.totalQueries) devsMoreActive++;
+  }
+
+  return {
+    weekStart: thisFrom,
+    weekEnd: thisTo,
+    prevWeekStart: lastFrom,
+    prevWeekEnd: lastTo,
+    devDeltas,
+    teamSummary: {
+      queriesPct: calcPct(teamThisQueries, teamLastQueries),
+      devsMoreActive,
+      totalDevs: allDevs.length,
+    },
+  };
+}
+
+/* === FEATURE 4a: Inactive Dev Flag === */
+function getInactivityStatus() {
+  const allDevs = loadAllDevelopers();
+  const now = Date.now();
+  const result = {};
+
+  // Use calendar-day difference so "yesterday at 10pm" counts as 1 day ago, not 0
+  const todayStr = new Date(now).toISOString().split('T')[0];
+  function calendarDaysDiff(dateStr) {
+    const a = new Date(todayStr);
+    const b = new Date(dateStr);
+    return Math.round((a - b) / 86400000);
+  }
+
+  for (const dev of allDevs) {
+    const syncDateStr = dev.lastSync ? dev.lastSync.split('T')[0] : null;
+    const daysSinceLastSync = syncDateStr ? calendarDaysDiff(syncDateStr) : 999;
+
+    // Find last session date
+    let lastSessionDate = null;
+    for (const s of (dev.sessions || [])) {
+      if (s.date && s.date !== 'unknown') {
+        if (!lastSessionDate || s.date > lastSessionDate) lastSessionDate = s.date;
+      }
+    }
+    const daysSinceLastSession = lastSessionDate
+      ? calendarDaysDiff(lastSessionDate)
+      : 999;
+
+    let flag = 'ok';
+    if (daysSinceLastSync >= 7) flag = 'critical';
+    else if (daysSinceLastSync >= 4) flag = 'warning';
+
+    result[dev.devId] = {
+      daysSinceLastSync,
+      daysSinceLastSession,
+      flag,
+    };
+  }
+
+  return result;
+}
+
+module.exports = { getProductivityAnalytics, getWeekOverWeekDeltas, getInactivityStatus };

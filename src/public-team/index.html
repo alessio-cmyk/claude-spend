@@ -160,6 +160,55 @@
   .prod-table td { font-size: 12px; }
   .prod-table .dev-name { font-weight: 600; font-size: 13px; }
   .mini-bar { display: inline-block; height: 4px; border-radius: 2px; vertical-align: middle; }
+
+  /* === FEATURE 1: Heatmap === */
+  .heatmap-tooltip { position: fixed; pointer-events: none; background: var(--text); color: white; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: 500; z-index: 9999; display: none; white-space: nowrap; }
+
+  /* === FEATURE 6: First Prompts Log === */
+  .prompts-toggle { background: none; border: 1px solid var(--border); color: var(--text-secondary); padding: 8px 16px; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600; font-family: var(--font); transition: all 0.15s; width: 100%; text-align: left; }
+  .prompts-toggle:hover { border-color: var(--indigo); color: var(--indigo); }
+  .prompt-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .prompt-row:last-child { border-bottom: none; }
+  .prompt-date { color: var(--text-tertiary); font-weight: 500; white-space: nowrap; min-width: 60px; }
+  .prompt-text { color: var(--text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 11px; }
+
+  /* === FEATURE 7: Streak Calendar === */
+  .streak-stats { display: flex; gap: 20px; margin-top: 12px; font-size: 12px; font-weight: 600; color: var(--text-secondary); flex-wrap: wrap; }
+  .streak-stat-val { font-size: 18px; font-weight: 800; color: var(--text); display: block; }
+
+  /* === FEATURE 2: WoW Trend === */
+  .wow-up { color: #047857; }
+  .wow-down { color: #B91C1C; }
+  .wow-stable { color: #64748b; }
+  .wow-banner { font-size: 13px; color: var(--text-secondary); font-weight: 500; padding: 10px 16px; background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 16px; }
+
+  /* === FEATURE 4: Inactive Dev Alert === */
+  .inactive-alert { background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E; padding: 12px 20px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .inactive-alert-close { background: none; border: none; color: #92400E; cursor: pointer; font-size: 18px; font-weight: 700; padding: 0 4px; font-family: var(--font); }
+  .inactive-alert-close:hover { color: #78350F; }
+  .recency-dot.pulse { animation: pulse-dot 1.5s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .dev-name-muted { color: var(--text-tertiary) !important; }
+  .inactivity-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-left: 8px; }
+  .inactivity-badge.warning { background: #FFFBEB; color: #92400E; }
+  .inactivity-badge.critical { background: #FEF2F2; color: #B91C1C; }
+
+  /* Getting Started Guide */
+  .getting-started { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; margin-bottom: 28px; position: relative; }
+  .getting-started-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .getting-started-header h3 { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .getting-started-header h3 .gs-icon { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, #E0E7FF, #C7D2FE); display: inline-flex; align-items: center; justify-content: center; }
+  .getting-started-dismiss { background: none; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 12px; font-weight: 600; font-family: var(--font); padding: 4px 10px; border-radius: 6px; transition: all 0.15s; }
+  .getting-started-dismiss:hover { color: var(--text-secondary); background: var(--bg); }
+  .gs-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 768px) { .gs-steps { grid-template-columns: 1fr; } }
+  .gs-step { background: var(--bg); border-radius: var(--radius-sm); padding: 20px; position: relative; }
+  .gs-step-num { width: 24px; height: 24px; border-radius: 50%; background: var(--gradient-main); color: white; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+  .gs-step h4 { font-size: 13px; font-weight: 700; margin-bottom: 6px; color: var(--text); }
+  .gs-step p { font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 8px; }
+  .gs-cmd { background: var(--white); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-family: var(--mono); font-size: 11px; color: var(--indigo); font-weight: 600; display: block; word-break: break-all; }
+  .gs-or { font-size: 11px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; margin: 6px 0; letter-spacing: 0.5px; }
+  .gs-note { font-size: 11px; color: var(--text-tertiary); margin-top: 12px; font-style: italic; }
 </style>
 </head>
 <body>
@@ -170,15 +219,27 @@
 </div>
 
 <div id="app" class="container" style="display:none"></div>
+<div class="heatmap-tooltip" id="heatmapTooltip"></div>
+<div class="heatmap-tooltip" id="chartTooltip"></div>
 
 <script>
 // --- State ---
 let LB_DATA = null;
 let PROD_DATA = null;
+let DEV_FULL_DATA = null; // full dev data for detail view
 let currentTab = 'leaderboard'; // leaderboard | productivity | dev
 let selectedDev = null;
 let dateRange = { preset: 'all', from: null, to: null };
 let sortState = { key: 'totalTokens', dir: 'desc' };
+/* === FEATURE 2: WoW Data === */
+let WOW_DATA = null;
+/* === FEATURE 3: Health History === */
+let HEALTH_HISTORY = null;
+/* === FEATURE 4: Inactivity Data === */
+let INACTIVITY_DATA = null;
+let AUTH_ENABLED = false;
+let inactiveAlertDismissed = false;
+let gettingStartedDismissed = localStorage.getItem('cs_guide_dismissed') === '1';
 
 // --- Helpers ---
 function fmt(n) {
@@ -215,6 +276,13 @@ function projShort(p) {
   const k = /^(?:Users|home|user)-[^-]+-|^(?:GitHub|GitLab|git|Projects|projects|workspace|Workspace|Desktop|Documents|source|src|dev|Dev|code|Code|repos|Repos)-/;
   let prev; do{prev=s;s=s.replace(k,'');}while(s!==prev&&s.length>0); return s||p;
 }
+function projDecode(p) {
+  if (!p || p === 'unknown') return 'Unknown';
+  const parts = p.replace(/^[A-Za-z]--/, '').split(/[-]|%2F/i);
+  const seg = parts.filter(s => s && !['Users','home','user','GitHub','GitLab','git','Projects','projects','workspace','Workspace','Desktop','Documents','source','src','dev','Dev','code','Code','repos','Repos'].includes(s)).pop();
+  if (!seg) return projShort(p);
+  return seg.charAt(0).toUpperCase() + seg.slice(1);
+}
 function recencyColor(ls) {
   if (!ls) return '#CBD5E1';
   const h = (Date.now() - new Date(ls).getTime()) / 3600000;
@@ -226,6 +294,7 @@ function trendBadge(t) {
 }
 const MODEL_COLORS = { opus: '#6366F1', sonnet: '#10B981', haiku: '#F97316' };
 const COLORS = ['#6366F1','#10B981','#F59E0B','#F43F5E','#3B82F6','#EC4899','#06B6D4','#8B5CF6','#F97316','#14B8A6'];
+const DEV_COLORS = ['#6366F1','#10B981','#F59E0B','#F43F5E','#3B82F6','#EC4899','#06B6D4','#8B5CF6','#F97316','#14B8A6','#EF4444','#84CC16'];
 function getModelColor(m) { for (const [k,c] of Object.entries(MODEL_COLORS)) { if(m.includes(k))return c; } return '#94A3B8'; }
 
 // --- API ---
@@ -241,12 +310,24 @@ async function loadData() {
   try {
     const dp = getDateParams();
     const q = dp ? '?' + dp : '';
-    const [lbRes, prodRes] = await Promise.all([
+    const [lbRes, prodRes, wowRes, inactRes, hhRes, healthRes] = await Promise.all([
       fetch('/api/team/leaderboard' + q),
-      fetch('/api/team/productivity' + q)
+      fetch('/api/team/productivity' + q),
+      /* === FEATURE 2: WoW always fetched independently of date range === */
+      fetch('/api/team/wow'),
+      /* === FEATURE 4: Inactivity always fetched independently of date range === */
+      fetch('/api/team/inactivity'),
+      /* === FEATURE 3: Health history === */
+      fetch('/api/team/health-history?days=' + (dateRange.preset === '1d' ? 7 : dateRange.preset === '7d' ? 14 : dateRange.preset === '30d' ? 30 : dateRange.preset === '90d' ? 90 : 60)),
+      fetch('/api/team/health'),
     ]);
     LB_DATA = await lbRes.json();
     PROD_DATA = await prodRes.json();
+    WOW_DATA = await wowRes.json();
+    INACTIVITY_DATA = await inactRes.json();
+    HEALTH_HISTORY = await hhRes.json();
+    try { const h = await healthRes.json(); AUTH_ENABLED = !!h.authEnabled; } catch {}
+    DEV_FULL_DATA = null;
     render();
   } catch (e) {
     document.getElementById('loading').innerHTML =
@@ -272,12 +353,25 @@ function applyCustom() {
   if (!f) return;
   dateRange = {preset:'custom',from:f,to:t||toISO(new Date())}; loadData();
 }
-function goToDev(id) { selectedDev = id; currentTab = 'dev'; render(); }
-function goBack() { currentTab = 'leaderboard'; selectedDev = null; render(); }
+function goToDev(id) { selectedDev = id; currentTab = 'dev'; DEV_FULL_DATA = null; render(); }
+function goBack() { currentTab = 'leaderboard'; selectedDev = null; DEV_FULL_DATA = null; render(); }
 
 // --- Main View (Leaderboard + Productivity tabs) ---
 function renderMainView(app) {
+  /* === FEATURE 4c: Inactive dev alert banner === */
+  let alertHtml = '';
+  if (!inactiveAlertDismissed && INACTIVITY_DATA) {
+    const criticalDevs = Object.entries(INACTIVITY_DATA).filter(([,v]) => v.flag === 'critical').map(([k]) => k);
+    if (criticalDevs.length > 0) {
+      alertHtml = `<div class="inactive-alert animate" id="inactiveAlert">
+        <span>&#9888;&#65039; ${criticalDevs.length} developer${criticalDevs.length>1?'s':''} haven't synced in 7+ days: <strong>${criticalDevs.map(d => esc(d)).join(', ')}</strong></span>
+        <button class="inactive-alert-close" onclick="dismissInactiveAlert()">&times;</button>
+      </div>`;
+    }
+  }
+
   app.innerHTML = `
+    ${alertHtml}
     <div class="header animate">
       <div class="header-left">
         <div class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
@@ -324,29 +418,157 @@ function renderLeaderboard() {
       `).join('')}
     </div>
     <div id="lbTable" class="animate delay-3"></div>
+    <div id="teamHeatmap" class="animate delay-4"></div>
   `;
 
+  /* Getting Started guide */
+  let gsHtml = '';
+  if (!gettingStartedDismissed) {
+    const serverHost = window.location.hostname === 'localhost' ? 'http://localhost:' + window.location.port : window.location.origin;
+    const syncCmd = AUTH_ENABLED
+      ? 'npx claude-spend --sync --key &lt;your-key&gt; --server ' + esc(serverHost)
+      : 'npx claude-spend --sync --name YourName --server ' + esc(serverHost);
+    const aliasCmd = AUTH_ENABLED
+      ? "alias claude-sync='npx claude-spend --sync --key &lt;your-key&gt; --server " + esc(serverHost) + "'"
+      : "alias claude-sync='npx claude-spend --sync --name YourName --server " + esc(serverHost) + "'";
+    const keyNote = AUTH_ENABLED ? '<p class="gs-note" style="margin-top:6px"><strong>Your admin will give you a personal API key.</strong> Your name is linked to the key automatically.</p>' : '';
+    gsHtml = `<div class="getting-started animate delay-2" id="gettingStarted">
+      <div class="getting-started-header">
+        <h3><span class="gs-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span> Getting Started — Add Your Team</h3>
+        <button class="getting-started-dismiss" onclick="dismissGuide()">Dismiss</button>
+      </div>
+      <div class="gs-steps">
+        <div class="gs-step">
+          <div class="gs-step-num">1</div>
+          <h4>First Sync (one command)</h4>
+          <p>Each team member runs this — no cloning or installing needed.</p>
+          <code class="gs-cmd">${syncCmd}</code>
+          <p class="gs-note">Reads local ~/.claude files and sends aggregated token counts to this server.</p>
+          ${keyNote}
+        </div>
+        <div class="gs-step">
+          <div class="gs-step-num">2</div>
+          <h4>Sync Daily</h4>
+          <p>Add a shell alias so syncing takes one command every day.</p>
+          <code class="gs-cmd">${aliasCmd}</code>
+          <div class="gs-or">— add to ~/.zshrc or ~/.bashrc —</div>
+          <p class="gs-note">Then just run <strong>claude-sync</strong> daily to keep the dashboard up to date.</p>
+        </div>
+        <div class="gs-step">
+          <div class="gs-step-num">3</div>
+          <h4>That's It</h4>
+          <p>Once synced, each member appears on the leaderboard and productivity tabs automatically.</p>
+          <p style="font-size:12px;color:var(--text-secondary);margin-top:8px"><strong>Running the server?</strong> The admin clones the repo once:</p>
+          <code class="gs-cmd">git clone https://github.com/alessio-cmyk/claude-spend.git<br>cd claude-spend && npm install<br>node src/team-server.js</code>
+        </div>
+      </div>
+    </div>`;
+  }
+
   if (!lb.length) {
-    document.getElementById('lbTable').innerHTML = `<div class="table-card"><div class="empty-state"><h3>No developers synced yet</h3><p>Run: <code>node src/index.js --sync --name your-name</code></p></div></div>`;
+    document.getElementById('lbTable').innerHTML = gsHtml + `<div class="table-card"><div class="empty-state"><h3>No developers synced yet</h3><p>Run: <code>${syncCmd}</code></p></div></div>`;
     return;
   }
 
   const maxT = Math.max(...lb.map(d => d.totalTokens), 1);
+
+  /* === FEATURE 8: CSV Export Button === */
+  const exportBtn = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div class="section-header" style="margin-bottom:0">
+      <div class="section-icon" style="background:linear-gradient(135deg,#E0E7FF,#C7D2FE)"><svg viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="2.5" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M18 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+      <div class="section-title">Leaderboard</div>
+    </div>
+    <button class="btn" onclick="exportCSV()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export CSV</button>
+  </div>`;
+
+  /* === FEATURE 2b: WoW summary banner === */
+  let wowBannerHtml = '';
+  if (WOW_DATA && WOW_DATA.teamSummary) {
+    const ws = WOW_DATA;
+    const ts = ws.teamSummary;
+    const weekLabel = formatDate(ws.weekStart) + '–' + formatDate(ws.weekEnd);
+    const dir = ts.queriesPct > 0 ? 'up' : ts.queriesPct < 0 ? 'down' : 'flat';
+    wowBannerHtml = `<div class="wow-banner animate delay-2">Week of ${weekLabel} · Team queries ${dir} ${Math.abs(ts.queriesPct)}% vs last week · ${ts.devsMoreActive} of ${ts.totalDevs} devs more active</div>`;
+  }
+
+  /* === FEATURE 4b: Build inactivity map for recency dots === */
+  const inactMap = INACTIVITY_DATA || {};
+
   document.getElementById('lbTable').innerHTML = `
+    ${gsHtml}
+    ${exportBtn}
+    ${wowBannerHtml}
     <div class="table-card"><table>
-      <thead><tr><th style="width:36px">#</th><th>Developer</th><th style="text-align:right">Sessions</th><th style="text-align:right">Queries</th><th style="text-align:right" class="sorted">Tokens</th><th style="text-align:right">Cost</th><th style="width:120px">Usage</th><th style="width:36px">Sync</th></tr></thead>
-      <tbody>${lb.map((d,i) => `<tr onclick="goToDev('${esc(d.devId)}')">
+      <thead><tr><th style="width:36px">#</th><th>Developer</th><th style="text-align:right">Sessions</th><th style="text-align:right">Queries</th><th style="text-align:right" class="sorted">Tokens</th><th style="text-align:right">Cost</th><th style="width:120px">Usage</th><th>WoW Trend</th><th style="width:36px">Sync</th></tr></thead>
+      <tbody>${lb.map((d,i) => {
+        const wow = WOW_DATA && WOW_DATA.devDeltas && WOW_DATA.devDeltas[d.devId];
+        const wowPct = wow ? wow.queries.pct : 0;
+        let wowCell = '<span class="wow-stable">— stable</span>';
+        let wowTooltip = '';
+        if (wow) {
+          wowTooltip = 'Queries: ' + wow.queries.current + ' this week vs ' + wow.queries.previous + ' last week (' + (wow.queries.delta>=0?'+':'') + wow.queries.delta + ' / ' + (wowPct>=0?'+':'') + wowPct + '%)';
+          if (wowPct >= 10) wowCell = '<span class="wow-up">&#9650; +' + Math.abs(wowPct) + '%</span>';
+          else if (wowPct <= -10) wowCell = '<span class="wow-down">&#9660; -' + Math.abs(wowPct) + '%</span>';
+        }
+        const inact = inactMap[d.devId];
+        const inactFlag = inact ? inact.flag : 'ok';
+        let dotClass = 'recency-dot';
+        let dotColor = recencyColor(d.lastSync);
+        let dotTitle = d.lastSync ? new Date(d.lastSync).toLocaleString() : 'never';
+        let nameMuted = '';
+        if (inactFlag === 'critical') {
+          dotColor = '#EF4444'; dotClass += ' pulse';
+          dotTitle = 'Inactive for ' + (inact.daysSinceLastSync) + ' days';
+          nameMuted = ' dev-name-muted';
+        } else if (inactFlag === 'warning') {
+          dotColor = '#F59E0B';
+          dotTitle = 'Last synced ' + (inact.daysSinceLastSync) + ' days ago - consider syncing today';
+        }
+        return `<tr onclick="goToDev('${esc(d.devId)}')">
         <td><span class="rank-badge${i<3?' rank-'+(i+1):''}">${i+1}</span></td>
-        <td style="font-weight:600">${esc(d.devId)}</td>
+        <td style="font-weight:600" class="${nameMuted}">${esc(d.devId)}</td>
         <td class="token-num">${fmtFull(d.totalSessions)}</td>
         <td class="token-num">${fmtFull(d.totalQueries)}</td>
         <td class="token-num" style="font-weight:700">${fmt(d.totalTokens)}</td>
         <td class="token-num">${fmtCost(d.totalCost)}</td>
         <td><div class="bar-track"><div class="bar-fill" style="width:${(d.totalTokens/maxT*100).toFixed(1)}%;background:var(--indigo)"></div></div></td>
-        <td style="text-align:center"><span class="recency-dot" style="background:${recencyColor(d.lastSync)}" title="${d.lastSync?new Date(d.lastSync).toLocaleString():'never'}"></span></td>
-      </tr>`).join('')}</tbody>
+        <td style="white-space:nowrap" title="${esc(wowTooltip)}">${wowCell}</td>
+        <td style="text-align:center"><span class="${dotClass}" style="background:${dotColor}" title="${esc(dotTitle)}"></span></td>
+      </tr>`;
+      }).join('')}</tbody>
     </table></div>
   `;
+
+  /* === FEATURE 1: Team Contribution Heatmap === */
+  const teamDaily = PROD_DATA.dailyTrend || [];
+  if (teamDaily.length) {
+    document.getElementById('teamHeatmap').innerHTML = `
+      <div class="chart-card">
+        <h3>Team Contribution Heatmap</h3>
+        <canvas id="teamHeatmapCanvas"></canvas>
+      </div>
+    `;
+    setTimeout(() => renderHeatmap('teamHeatmapCanvas', teamDaily, true), 80);
+  }
+}
+
+/* === FEATURE 8: CSV Export === */
+function exportCSV() {
+  const devs = PROD_DATA.developers.filter(d => d.sessions > 0);
+  const headers = ['Developer','TotalSessions','TotalQueries','TotalCost($)','AvgQueriesPerSession','CacheHitRate(%)','ToolActivationRate(%)','CurrentStreak(days)','LastActive','HealthScore(0-100)'];
+  const rows = devs.map(d => {
+    const health = Math.round(computeHealth(d));
+    const lastActive = d.dailyBreakdown.length ? d.dailyBreakdown[d.dailyBreakdown.length-1].date : '';
+    return [d.devId, d.sessions, d.queries, d.cost.toFixed(2), d.avgQueriesPerSession, d.cacheHitRate.toFixed(1), d.toolActivationRate, d.streak, lastActive, health].join(',');
+  });
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const today = toISO(new Date());
+  a.href = url; a.download = `claude-code-team-${today}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // --- Productivity Tab ---
@@ -366,23 +588,43 @@ function renderProductivity() {
       ].map(c => `<div class="stat-card"><div class="stat-label">${c.l}</div><div class="stat-value">${c.v}</div><div class="stat-sub">${c.s}</div></div>`).join('')}
     </div>
     <div class="charts-grid animate delay-2" id="prodCharts"></div>
+    <div class="animate delay-2" id="healthHistorySection"></div>
     <div class="animate delay-3" id="prodTable"></div>
+    <div id="teamRadarSection" class="animate delay-3"></div>
     <div class="grid-2 animate delay-4" id="prodBottom"></div>
   `;
 
   // Charts
   document.getElementById('prodCharts').innerHTML = `
     <div class="chart-card"><h3>Team Daily Activity</h3><canvas id="teamDailyChart"></canvas>
-      <div class="legend"><div class="legend-item"><div class="legend-dot" style="background:var(--indigo)"></div>Queries</div><div class="legend-item"><div class="legend-dot" style="background:var(--teal)"></div>Active Devs</div></div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--indigo)"></div>Queries</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div>Cost ($)</div>
+      </div>
     </div>
     <div class="chart-card"><h3>Model Breakdown</h3><canvas id="teamModelChart"></canvas>
       <div id="teamModelLegend" class="legend" style="flex-direction:column;gap:10px;margin-top:16px"></div>
     </div>
   `;
   setTimeout(() => {
-    renderBarChart('teamDailyChart', PROD_DATA.dailyTrend, 'queries');
+    renderStackedBarChart('teamDailyChart', PROD_DATA.dailyTrend);
     renderDonut('teamModelChart', 'teamModelLegend', PROD_DATA.modelBreakdown.reduce((m, x) => { m[x.model] = {tokens:x.tokens,cost:x.cost,queries:x.queries}; return m; }, {}));
   }, 50);
+
+  /* === FEATURE 3c: Team Health Over Time chart === */
+  const hhSection = document.getElementById('healthHistorySection');
+  if (HEALTH_HISTORY && HEALTH_HISTORY.length >= 3) {
+    hhSection.innerHTML = `
+      <div class="chart-card" style="margin-bottom:28px">
+        <h3>Team Health Over Time</h3>
+        <canvas id="healthHistoryChart"></canvas>
+        <div id="healthHistoryLegend" class="legend" style="margin-top:14px"></div>
+      </div>
+    `;
+    setTimeout(() => renderHealthHistoryChart('healthHistoryChart', 'healthHistoryLegend', HEALTH_HISTORY), 80);
+  } else if (hhSection) {
+    hhSection.innerHTML = `<div class="chart-card" style="margin-bottom:28px;text-align:center;padding:40px 20px;color:var(--text-tertiary)"><p style="font-size:14px;font-weight:500">Health history builds up as your team syncs daily. Check back tomorrow.</p></div>`;
+  }
 
   // Developer productivity table
   if (devs.length) {
@@ -410,6 +652,18 @@ function renderProductivity() {
     `;
   }
 
+  /* === FEATURE 2: Team Comparison Radar === */
+  if (devs.length > 0) {
+    document.getElementById('teamRadarSection').innerHTML = `
+      <div class="chart-card" style="margin-bottom:28px">
+        <h3>Team ROI Comparison (Radar)</h3>
+        <canvas id="teamRadarChart"></canvas>
+        <div id="teamRadarLegend" class="legend" style="margin-top:16px"></div>
+      </div>
+    `;
+    setTimeout(() => renderTeamRadar('teamRadarChart', 'teamRadarLegend', devs), 80);
+  }
+
   // Bottom: tools + projects
   let bottomHtml = '';
   if (PROD_DATA.toolBreakdown.length) {
@@ -434,19 +688,32 @@ async function renderDevView(app) {
   const devProd = PROD_DATA.developers.find(d => d.devId === selectedDev);
   if (!devProd) { app.innerHTML = '<p>Developer not found</p>'; return; }
 
+  /* === FEATURE 4d: Inactivity badge in dev detail header === */
+  let devInactBadge = '';
+  if (INACTIVITY_DATA && INACTIVITY_DATA[selectedDev]) {
+    const di = INACTIVITY_DATA[selectedDev];
+    if (di.flag === 'warning') devInactBadge = `<span class="inactivity-badge warning">&#9888; Synced ${di.daysSinceLastSync} days ago</span>`;
+    else if (di.flag === 'critical') devInactBadge = `<span class="inactivity-badge critical">&#128308; Inactive ${di.daysSinceLastSync} days</span>`;
+  }
+
   app.innerHTML = `
     <div class="header animate">
       <div class="header-left">
         <div class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
-        <h1>${esc(selectedDev)}</h1>
+        <h1>${esc(selectedDev)}${devInactBadge}</h1>
       </div>
       <div class="header-right"><button class="btn" onclick="goBack()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>Back</button></div>
     </div>
     <div class="date-bar animate delay-1" id="dateBar"></div>
     <div id="devKpis" class="animate delay-1"></div>
     <div id="devCharts" class="charts-grid animate delay-2"></div>
+    <div id="devCacheChart" class="animate delay-2"></div>
     <div id="devROI" class="grid-2 animate delay-3"></div>
     <div id="devBottom" class="grid-2 animate delay-4"></div>
+    <div id="devHistogram" class="animate delay-4"></div>
+    <div id="devStreakCal" class="animate delay-4"></div>
+    <div id="devHeatmap" class="animate delay-4"></div>
+    <div id="devPromptsLog" class="animate delay-4"></div>
     <div id="devSessions" class="animate delay-4"></div>
     <div class="footer">Made with <a href="https://claude.ai/code" target="_blank">Claude Code</a> by <a href="https://www.linkedin.com/in/writetoaniketparihar/" target="_blank">Aniket</a></div>
   `;
@@ -457,36 +724,60 @@ async function renderDevView(app) {
   const hColor = health >= 70 ? 'var(--emerald)' : health >= 40 ? 'var(--amber)' : 'var(--rose)';
   const hLabel = health >= 70 ? 'Excellent' : health >= 40 ? 'Good' : 'Needs Attention';
 
+  /* === FEATURE 4: Last Synced card data === */
+  const devInact = INACTIVITY_DATA && INACTIVITY_DATA[selectedDev];
+  const syncDays = devInact ? devInact.daysSinceLastSync : null;
+  const syncLabel = syncDays === 0 ? 'Today' : syncDays === 1 ? '1 day ago' : syncDays != null ? syncDays + ' days ago' : 'Unknown';
+  const syncColor = syncDays === 0 ? 'var(--emerald)' : syncDays != null && syncDays <= 3 ? 'var(--amber)' : 'var(--rose)';
+
   // KPIs - 2 rows
   document.getElementById('devKpis').innerHTML = `
     <div class="stats-row" style="margin-bottom:16px">
       ${[{l:'Sessions',v:fmtFull(d.sessions),s:d.activeDays+' active days'},{l:'Queries',v:fmtFull(d.queries),s:d.avgQueriesPerSession+' per session'},{l:'Total Tokens',v:fmt(d.totalTokens),s:fmt(d.avgTokensPerQuery)+' per query'},{l:'Cost',v:fmtCost(d.cost),s:fmtCost(d.cost/Math.max(1,d.sessions))+' per session'}].map(c=>`<div class="stat-card"><div class="stat-label">${c.l}</div><div class="stat-value">${c.v}</div><div class="stat-sub">${c.s}</div></div>`).join('')}
     </div>
-    <div class="stats-row stats-row-5">
+    <div class="stats-row" style="grid-template-columns:repeat(6,1fr)">
       <div class="stat-card"><div class="stat-label">Session Depth</div><div class="stat-value">${d.avgSessionDepth}</div><div class="stat-sub">queries per session</div></div>
       <div class="stat-card"><div class="stat-label">Tool Activation</div><div class="stat-value">${d.toolActivationRate}%</div><div class="stat-sub">${d.uniqueTools} unique tools</div></div>
       <div class="stat-card"><div class="stat-label">Cache Hit Rate</div><div class="stat-value">${fmtPct(d.cacheHitRate)}</div><div class="stat-sub">${fmt(d.cacheReadTokens)} cached</div></div>
       <div class="stat-card"><div class="stat-label">Streak</div><div class="stat-value">${d.streak}d</div><div class="stat-sub">${trendBadge(d.trend)}</div></div>
       <div class="stat-card"><div class="stat-label">Health Score</div><div style="display:flex;align-items:center;gap:12px;margin-top:4px"><div class="health-ring" style="border:3px solid ${hColor};color:${hColor}">${Math.round(health)}</div><span style="font-size:13px;font-weight:600;color:${hColor}">${hLabel}</span></div></div>
+      <div class="stat-card"><div class="stat-label">Last Synced</div><div class="stat-value" style="font-size:22px;color:${syncColor}">${syncLabel}</div><div class="stat-sub">${d.lastSync ? new Date(d.lastSync).toLocaleDateString() : 'never'}</div></div>
     </div>
   `;
 
-  // Charts
+  /* === FEATURE 3: Upgraded Daily Chart (stacked bars + cost line) === */
   document.getElementById('devCharts').innerHTML = `
-    <div class="chart-card"><h3>Daily Activity</h3><canvas id="devDailyChart"></canvas></div>
+    <div class="chart-card"><h3>Daily Activity</h3><canvas id="devDailyChart"></canvas>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--indigo)"></div>Queries</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div>Cost ($)</div>
+      </div>
+    </div>
     <div class="chart-card"><h3>Model Usage</h3><canvas id="devModelChart"></canvas><div id="devModelLegend" class="legend" style="flex-direction:column;gap:10px;margin-top:16px"></div></div>
   `;
   setTimeout(() => {
-    renderBarChart('devDailyChart', d.dailyBreakdown, 'queries');
+    renderStackedBarChart('devDailyChart', d.dailyBreakdown);
     renderDonut('devModelChart', 'devModelLegend', d.modelUsage);
   }, 50);
 
-  // ROI Signals + Tools
-  const roi = computeROI(d);
+  /* === FEATURE 4: Cache Efficiency Over Time === */
+  if (d.dailyBreakdown && d.dailyBreakdown.length > 1) {
+    document.getElementById('devCacheChart').innerHTML = `
+      <div class="chart-card" style="margin-bottom:28px">
+        <h3>Cache Efficiency Over Time</h3>
+        <canvas id="devCacheCanvas"></canvas>
+      </div>
+    `;
+    setTimeout(() => renderCacheEfficiencyChart('devCacheCanvas', d.dailyBreakdown, d.cacheReadTokens, d.totalTokens), 80);
+  }
+
+  /* === FEATURE 2: Individual Radar Chart === */
+  const roi = computeROIRadar(d, PROD_DATA.developers.filter(x => x.sessions > 0));
   let roiHtml = `<div class="chart-card"><h3>ROI Signals</h3>
+    <canvas id="devRadarChart"></canvas>
     ${roi.map(m => {
       const c = m.score >= 70 ? 'var(--emerald)' : m.score >= 40 ? 'var(--amber)' : 'var(--rose)';
-      return `<div class="roi-row"><span class="roi-label">${m.label}</span><div class="roi-track"><div class="roi-fill" style="width:${m.score}%;background:${c}"></div></div><span class="roi-value" style="color:${c}">${Math.round(m.score)}</span></div>`;
+      return `<div class="roi-row" style="margin-top:8px"><span class="roi-label">${m.label}</span><div class="roi-track"><div class="roi-fill" style="width:${m.score}%;background:${c}"></div></div><span class="roi-value" style="color:${c}">${Math.round(m.score)}</span></div>`;
     }).join('')}
   </div>`;
 
@@ -498,6 +789,7 @@ async function renderDevView(app) {
     </div>`;
   }
   document.getElementById('devROI').innerHTML = roiHtml + toolsHtml;
+  setTimeout(() => renderIndividualRadar('devRadarChart', roi), 100);
 
   // Projects
   const projEntries = Object.entries(d.projectUsage).sort((a,b) => b[1].tokens - a[1].tokens);
@@ -512,19 +804,85 @@ async function renderDevView(app) {
   }
   document.getElementById('devBottom').innerHTML = bottomHtml;
 
-  // Recent sessions via lite endpoint
+  // Load full dev data for session-level features
   try {
     const dp = getDateParams();
     const sep = dp ? '&' : '';
     const res = await fetch('/api/team/dev/' + encodeURIComponent(selectedDev) + '?lite=1' + sep + dp);
     const devData = await res.json();
-    const sessions = [...(devData.sessions||[])].sort((a,b) => (b.date||'').localeCompare(a.date||'')).slice(0, 20);
+    DEV_FULL_DATA = devData;
+    const sessions = [...(devData.sessions||[])].sort((a,b) => (b.timestamp||b.date||'').localeCompare(a.timestamp||a.date||''));
+
+    /* === FEATURE 5: Session Depth Histogram === */
     if (sessions.length) {
+      document.getElementById('devHistogram').innerHTML = `
+        <div class="chart-card" style="margin-bottom:28px">
+          <h3>Session Depth Distribution &mdash; how deep does each conversation go?</h3>
+          <canvas id="depthHistCanvas"></canvas>
+          <div id="depthHistStats" style="margin-top:12px"></div>
+        </div>
+      `;
+      setTimeout(() => renderSessionHistogram('depthHistCanvas', 'depthHistStats', sessions), 80);
+    }
+
+    /* === FEATURE 7: Streak Calendar View === */
+    if (sessions.length) {
+      document.getElementById('devStreakCal').innerHTML = `
+        <div class="chart-card" style="margin-bottom:28px">
+          <h3>Activity Streak</h3>
+          <canvas id="streakCalCanvas"></canvas>
+          <div id="streakCalStats" class="streak-stats"></div>
+        </div>
+      `;
+      setTimeout(() => renderStreakCalendar('streakCalCanvas', 'streakCalStats', sessions), 100);
+    }
+
+    /* === FEATURE 1: Individual Contribution Heatmap === */
+    if (d.dailyBreakdown && d.dailyBreakdown.length) {
+      document.getElementById('devHeatmap').innerHTML = `
+        <div class="chart-card" style="margin-bottom:28px">
+          <h3>Contribution Heatmap</h3>
+          <canvas id="devHeatmapCanvas"></canvas>
+        </div>
+      `;
+      setTimeout(() => renderHeatmap('devHeatmapCanvas', d.dailyBreakdown, false), 120);
+    }
+
+    /* === FEATURE 6: First Prompts Log === */
+    const recentSessions = sessions.slice(0, 20);
+    if (recentSessions.length) {
+      document.getElementById('devPromptsLog').innerHTML = `
+        <div class="chart-card" style="margin-bottom:28px">
+          <button class="prompts-toggle" onclick="togglePrompts(this)">Show recent prompts &#9662;</button>
+          <div id="promptsList" style="display:none;margin-top:14px">
+            ${recentSessions.map(s => {
+              const date = formatDate(s.date || '');
+              const model = s.model || (s._models ? Object.keys(s._models).sort((a,b) => (s._models[b].tokens||0) - (s._models[a].tokens||0))[0] : '') || '';
+              const mc = modelClass(model);
+              const ms = modelShort(model);
+              const proj = projDecode(s.project || 'unknown');
+              let fp = s.firstPrompt || '';
+              if (fp.length >= 59 && !fp.endsWith('...')) fp += '...';
+              return `<div class="prompt-row">
+                <span class="prompt-date">${date}</span>
+                <span class="model-badge ${mc}" style="flex-shrink:0"><span class="model-dot"></span>${esc(ms)}</span>
+                <span style="color:var(--text);font-weight:600;font-size:12px;flex-shrink:0">${esc(proj)}</span>
+                <span class="prompt-text">${fp ? esc(fp) : '<em style="color:var(--text-tertiary)">No prompt</em>'}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Recent sessions table
+    const tableSessions = sessions.slice(0, 20);
+    if (tableSessions.length) {
       document.getElementById('devSessions').innerHTML = `
         <div class="section-header"><div class="section-icon" style="background:linear-gradient(135deg,#ECFDF5,#D1FAE5)"><svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg></div><div class="section-title">Recent Sessions</div></div>
         <div class="table-card"><table>
           <thead><tr><th>Date</th><th>Project</th><th style="text-align:right">Queries</th><th style="text-align:right">Tokens</th><th style="text-align:right">Cost</th><th>Model</th></tr></thead>
-          <tbody>${sessions.map(s => {
+          <tbody>${tableSessions.map(s => {
             const tm = s._models ? Object.entries(s._models).sort((a,b) => b[1].tokens - a[1].tokens)[0] : null;
             return `<tr style="cursor:default"><td style="white-space:nowrap;color:var(--text-secondary);font-weight:500;font-size:12px">${formatDate(s.date||'')}</td><td><span class="proj-name">${esc(projShort(s.project||'unknown'))}</span></td><td class="token-num">${s.queryCount||0}</td><td class="token-num" style="font-weight:700">${fmt(s.totalTokens||0)}</td><td class="token-num">${fmtCost(s.cost||0)}</td><td>${tm?'<span class="model-badge '+modelClass(tm[0])+'"><span class="model-dot"></span>'+modelShort(tm[0])+'</span>':'-'}</td></tr>`;
           }).join('')}</tbody>
@@ -532,6 +890,15 @@ async function renderDevView(app) {
       `;
     }
   } catch {}
+}
+
+/* === FEATURE 6: Toggle Prompts === */
+function togglePrompts(btn) {
+  const list = document.getElementById('promptsList');
+  if (!list) return;
+  const showing = list.style.display !== 'none';
+  list.style.display = showing ? 'none' : 'block';
+  btn.innerHTML = showing ? 'Show recent prompts &#9662;' : 'Hide recent prompts &#9652;';
 }
 
 // --- Analytics ---
@@ -557,47 +924,155 @@ function computeROI(d) {
   ];
 }
 
+/* === FEATURE 2: ROI Radar computations === */
+function computeROIRadar(d, allDevs) {
+  // 1. Query Depth: avg queries/session, normalise 0-20+ -> 0-100
+  const queryDepth = Math.min(100, (d.avgQueriesPerSession / 20) * 100);
+
+  // 2. Tool Activation Rate: % sessions with >= 1 tool call
+  const toolActivation = Math.min(100, d.toolActivationRate);
+
+  // 3. Cache Leverage: cacheReadTokens / (inputTokens + cacheReadTokens) * 100
+  const cacheInput = (d.inputTokens || 0) + (d.cacheReadTokens || 0);
+  const cacheLeverage = cacheInput > 0 ? ((d.cacheReadTokens || 0) / cacheInput) * 100 : 0;
+
+  // 4. Session Consistency: % working days (Mon-Fri) with >= 1 session
+  const daily = d.dailyBreakdown || [];
+  const allDates = daily.map(x => x.date).filter(Boolean).sort();
+  let workingDaysTotal = 0, workingDaysActive = 0;
+  if (allDates.length > 0) {
+    const start = new Date(allDates[0]);
+    const end = new Date(allDates[allDates.length - 1]);
+    const activeDateSet = new Set(allDates);
+    for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 1)) {
+      const dow = dt.getDay();
+      if (dow >= 1 && dow <= 5) {
+        workingDaysTotal++;
+        if (activeDateSet.has(toISO(dt))) workingDaysActive++;
+      }
+    }
+  }
+  const sessionConsistency = workingDaysTotal > 0 ? (workingDaysActive / workingDaysTotal) * 100 : 0;
+
+  // 5. Cost Efficiency: outputTokens / cost, normalised against team max
+  const costEff = d.cost > 0 ? (d.outputTokens || 0) / d.cost : 0;
+  const maxCostEff = Math.max(...allDevs.map(x => x.cost > 0 ? (x.outputTokens || 0) / x.cost : 0), 1);
+  const costEfficiency = (costEff / maxCostEff) * 100;
+
+  // 6. Model Discipline: % queries NOT on most expensive model (non-Opus)
+  const totalQ = Object.values(d.modelUsage).reduce((s, v) => s + (v.queries || 0), 0);
+  let opusQ = 0;
+  for (const [m, v] of Object.entries(d.modelUsage)) {
+    if (m.includes('opus')) opusQ += v.queries || 0;
+  }
+  const modelDiscipline = totalQ > 0 ? ((totalQ - opusQ) / totalQ) * 100 : 100;
+
+  return [
+    { label: 'Query Depth', score: queryDepth, raw: d.avgQueriesPerSession },
+    { label: 'Tool Activation', score: toolActivation, raw: d.toolActivationRate + '%' },
+    { label: 'Cache Leverage', score: Math.min(100, cacheLeverage), raw: cacheLeverage.toFixed(1) + '%' },
+    { label: 'Consistency', score: Math.min(100, sessionConsistency), raw: sessionConsistency.toFixed(0) + '%' },
+    { label: 'Cost Efficiency', score: Math.min(100, costEfficiency), raw: fmt(Math.round(costEff)) },
+    { label: 'Model Discipline', score: Math.min(100, modelDiscipline), raw: modelDiscipline.toFixed(0) + '%' },
+  ];
+}
+
 // --- Chart rendering ---
-function renderBarChart(id, daily, field) {
+
+/* === FEATURE 3: Daily Bar Chart with Cost Line + Power Day Markers === */
+function renderStackedBarChart(id, daily) {
   const canvas = document.getElementById(id);
   if (!canvas || !daily || !daily.length) return;
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.parentElement.clientWidth - 48;
-  const h = 180;
+  const h = 200;
   canvas.width = w * dpr; canvas.height = h * dpr;
   canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
   ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
 
-  const vals = daily.map(d => d[field] || d.queries || 0);
-  const maxV = Math.max(...vals, 1);
-  const barW = Math.max(4, Math.min(24, (w - 52) / daily.length - 2));
-  const gap = 2; const chartH = h - 32; const startX = 44;
+  const queryVals = daily.map(d => d.queries || 0);
+  const costVals = daily.map(d => d.cost || 0);
+  const maxQ = Math.max(...queryVals, 1);
+  const maxCost = Math.max(...costVals, 0.01);
 
+  // Power day markers (p90)
+  const sortedQ = [...queryVals].sort((a, b) => a - b);
+  const p90 = sortedQ[Math.floor(sortedQ.length * 0.9)] || Infinity;
+
+  const barW = Math.max(4, Math.min(24, (w - 80) / daily.length - 2));
+  const gap = 2; const chartH = h - 36; const startX = 44; const rightMargin = 40;
+
+  // Left Y-axis (queries)
   ctx.font = '500 9px Inter, system-ui'; ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'right';
   for (let i = 0; i <= 4; i++) {
-    const val = (maxV / 4) * i;
+    const val = (maxQ / 4) * i;
     const y = chartH - (chartH * i / 4) + 8;
-    ctx.fillText(fmt(val), startX - 8, y + 3);
+    ctx.fillText(fmt(Math.round(val)), startX - 8, y + 3);
     ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(startX, y); ctx.lineTo(w, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(startX, y); ctx.lineTo(w - rightMargin, y); ctx.stroke();
+  }
+
+  // Right Y-axis (cost)
+  ctx.textAlign = 'left';
+  for (let i = 0; i <= 4; i++) {
+    const val = (maxCost / 4) * i;
+    const y = chartH - (chartH * i / 4) + 8;
+    ctx.fillText('$' + val.toFixed(val >= 10 ? 0 : val >= 1 ? 1 : 2), w - rightMargin + 6, y + 3);
   }
 
   const grad = ctx.createLinearGradient(0, chartH + 8, 0, 0);
   grad.addColorStop(0, '#818CF8'); grad.addColorStop(1, '#6366F1');
 
+  // Query bars
   daily.forEach((d, i) => {
     const x = startX + i * (barW + gap);
-    const bH = Math.max(2, (vals[i] / maxV) * chartH);
+    const baseY = chartH + 8;
+    const bH = Math.max(2, (queryVals[i] / maxQ) * chartH);
+
     ctx.fillStyle = grad;
-    ctx.beginPath(); roundedRect(ctx, x, chartH + 8 - bH, barW, bH, Math.min(3, barW/2)); ctx.fill();
+    ctx.beginPath(); roundedRect(ctx, x, baseY - bH, barW, bH, Math.min(3, barW / 2)); ctx.fill();
+
+    // Power day marker
+    if (queryVals[i] >= p90 && p90 > 0) {
+      ctx.fillStyle = '#F59E0B';
+      ctx.font = '10px Inter, system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('\u26A1', x + barW / 2, baseY - bH - 4);
+    }
   });
 
+  // Cost line (orange)
+  ctx.beginPath();
+  ctx.strokeStyle = '#F97316'; ctx.lineWidth = 2;
+  daily.forEach((d, i) => {
+    const x = startX + i * (barW + gap) + barW / 2;
+    const y = chartH + 8 - (costVals[i] / maxCost) * chartH;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Cost dots
+  ctx.fillStyle = '#F97316';
+  daily.forEach((d, i) => {
+    if (daily.length <= 60 || i % Math.max(1, Math.floor(daily.length / 30)) === 0) {
+      const x = startX + i * (barW + gap) + barW / 2;
+      const y = chartH + 8 - (costVals[i] / maxCost) * chartH;
+      ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+  });
+
+  // X-axis labels
   ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'center'; ctx.font = '500 9px Inter, system-ui';
   const step = Math.max(1, Math.floor(daily.length / 7));
   daily.forEach((d, i) => {
     if (i % step === 0 || i === daily.length - 1)
-      ctx.fillText(formatDate(d.date), startX + i * (barW + gap) + barW / 2, chartH + 22);
+      ctx.fillText(formatDate(d.date), startX + i * (barW + gap) + barW / 2, chartH + 24);
+  });
+
+  // Tooltip
+  setupChartTooltip(canvas, daily, startX, barW, gap, chartH, (d, i) => {
+    return `${d.date} &mdash; ${queryVals[i]} queries, ${fmt(d.tokens || 0)} tokens, ${fmtCost(costVals[i])}`;
   });
 }
 
@@ -633,6 +1108,536 @@ function renderDonut(canvasId, legendId, modelMap) {
   }).join('');
 }
 
+/* === FEATURE 1: Contribution Heatmap === */
+function renderHeatmap(canvasId, dailyData, isTeam) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  // Build a map of date -> queries
+  const dayMap = {};
+  for (const d of dailyData) {
+    if (d.date) dayMap[d.date] = (dayMap[d.date] || 0) + (d.queries || 0);
+  }
+
+  // Dynamic range: from first data date to today
+  const today = new Date();
+  const allDates = Object.keys(dayMap).sort();
+  const firstDate = allDates.length > 0 ? new Date(allDates[0]) : new Date(today);
+
+  // Align start to Sunday of the week containing firstDate
+  const startDate = new Date(firstDate);
+  startDate.setDate(startDate.getDate() - startDate.getDay());
+
+  // Calculate number of weeks from startDate to today
+  const totalDays = Math.ceil((today - startDate) / 86400000) + 1;
+  const cols = Math.ceil(totalDays / 7);
+  const rows = 7;
+
+  const cellSize = 12, cellGap = 2, leftPad = 30, topPad = 18;
+  const maxW = canvas.parentElement.clientWidth - 48;
+  // Shrink cells if needed to fit
+  const neededW = leftPad + cols * (cellSize + cellGap) + 10;
+  const scale = neededW > maxW ? maxW / neededW : 1;
+  const cs = Math.floor(cellSize * scale), cg = Math.max(1, Math.floor(cellGap * scale));
+
+  const w = leftPad + cols * (cs + cg) + 10;
+  const h = topPad + rows * (cs + cg) + 10;
+
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
+
+  // Get all query values to compute intensity levels
+  const allVals = Object.values(dayMap).filter(v => v > 0);
+  const maxQ = allVals.length > 0 ? Math.max(...allVals) : 1;
+  const levels = [0, maxQ * 0.15, maxQ * 0.35, maxQ * 0.6, maxQ * 0.85];
+  const colors = ['#eee', '#B2DFDB', '#4DB6AC', '#00897B', '#00695C', '#004D40'];
+
+  // Day labels
+  ctx.font = '500 9px Inter, system-ui'; ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'right';
+  const dayLabels = ['', 'M', '', 'W', '', 'F', ''];
+  for (let r = 0; r < 7; r++) {
+    if (dayLabels[r]) ctx.fillText(dayLabels[r], leftPad - 6, topPad + r * (cs + cg) + cs - 2);
+  }
+
+  // Month labels
+  ctx.textAlign = 'center';
+  let lastMonth = -1;
+  const cellDates = [];
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rows; r++) {
+      const dt = new Date(startDate);
+      dt.setDate(dt.getDate() + c * 7 + r);
+      cellDates.push({ col: c, row: r, date: dt });
+      if (r === 0 && dt.getMonth() !== lastMonth) {
+        lastMonth = dt.getMonth();
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        ctx.fillText(months[lastMonth], leftPad + c * (cs + cg) + cs / 2, topPad - 6);
+      }
+    }
+  }
+
+  // Draw cells + store hit areas for tooltip
+  const hitAreas = [];
+  for (const cell of cellDates) {
+    const { col, row, date: dt } = cell;
+    const dateStr = toISO(dt);
+    const val = dayMap[dateStr] || 0;
+    const x = leftPad + col * (cs + cg);
+    const y = topPad + row * (cs + cg);
+
+    let colorIdx = 0;
+    if (val > 0) {
+      for (let l = levels.length - 1; l >= 0; l--) {
+        if (val >= levels[l]) { colorIdx = l + 1; break; }
+      }
+    }
+
+    ctx.fillStyle = dt > today ? '#f5f5f5' : colors[colorIdx];
+    ctx.beginPath();
+    roundedRect(ctx, x, y, cs, cs, 2);
+    ctx.fill();
+
+    hitAreas.push({ x, y, w: cs, h: cs, dateStr, val, dt });
+  }
+
+  // Tooltip handling
+  const tooltip = document.getElementById('heatmapTooltip');
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / dpr) / rect.width / dpr;
+    const my = (e.clientY - rect.top) * (canvas.height / dpr) / rect.height / dpr;
+    let found = null;
+    for (const ha of hitAreas) {
+      if (mx >= ha.x && mx <= ha.x + ha.w && my >= ha.y && my <= ha.y + ha.h) { found = ha; break; }
+    }
+    if (found && found.dt <= today) {
+      const dayName = found.dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      const sessions = dailyData.find(d => d.date === found.dateStr);
+      const sessCount = sessions ? (sessions.sessions || 0) : 0;
+      const cost = sessions ? (sessions.cost || 0) : 0;
+      tooltip.innerHTML = `${dayName} &mdash; ${found.val} queries, ${sessCount} sessions, ${fmtCost(cost)}`;
+      tooltip.style.display = 'block';
+      tooltip.style.left = (e.clientX + 12) + 'px';
+      tooltip.style.top = (e.clientY - 10) + 'px';
+    } else {
+      tooltip.style.display = 'none';
+    }
+  };
+  canvas.onmouseleave = () => { tooltip.style.display = 'none'; };
+}
+
+/* === FEATURE 2: Radar Chart Rendering === */
+function drawRadar(ctx, cx, cy, r, data, color, fillAlpha, showLabels, showValues) {
+  const n = data.length;
+  const angleStep = (Math.PI * 2) / n;
+
+  // Grid rings
+  if (showLabels) {
+    for (let ring = 1; ring <= 4; ring++) {
+      const rr = (r * ring) / 4;
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(0,0,0,0.06)'; ctx.lineWidth = 1;
+      for (let i = 0; i <= n; i++) {
+        const a = -Math.PI / 2 + i * angleStep;
+        const x = cx + Math.cos(a) * rr;
+        const y = cy + Math.sin(a) * rr;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // Axis lines
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + i * angleStep;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+      ctx.strokeStyle = 'rgba(0,0,0,0.06)'; ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  // Data polygon
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + i * angleStep;
+    const val = Math.max(0, Math.min(100, data[i].score)) / 100;
+    const x = cx + Math.cos(a) * r * val;
+    const y = cy + Math.sin(a) * r * val;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = color.replace(')', `,${fillAlpha})`).replace('rgb', 'rgba');
+  ctx.fill();
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+
+  // Labels
+  if (showLabels) {
+    ctx.font = '600 10px Inter, system-ui'; ctx.fillStyle = '#475569'; ctx.textAlign = 'center';
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + i * angleStep;
+      const lx = cx + Math.cos(a) * (r + 20);
+      const ly = cy + Math.sin(a) * (r + 20);
+      ctx.fillText(data[i].label, lx, ly + 3);
+      if (showValues && data[i].raw !== undefined) {
+        ctx.font = '500 9px Inter, system-ui'; ctx.fillStyle = '#94A3B8';
+        ctx.fillText(String(data[i].raw), lx, ly + 14);
+        ctx.font = '600 10px Inter, system-ui'; ctx.fillStyle = '#475569';
+      }
+    }
+  }
+}
+
+function renderIndividualRadar(canvasId, data) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !data.length) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const size = Math.min(280, canvas.parentElement.clientWidth - 48);
+  canvas.width = size * dpr; canvas.height = size * dpr;
+  canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+  ctx.scale(dpr, dpr);
+  const cx = size / 2, cy = size / 2, r = size / 2 - 40;
+  drawRadar(ctx, cx, cy, r, data, 'rgb(99,102,241)', 0.2, true, true);
+}
+
+function renderTeamRadar(canvasId, legendId, devs) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !devs.length) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const size = Math.min(400, canvas.parentElement.clientWidth - 48);
+  canvas.width = size * dpr; canvas.height = size * dpr;
+  canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
+  ctx.scale(dpr, dpr);
+  const cx = size / 2, cy = size / 2, r = size / 2 - 50;
+
+  const allROI = devs.map(d => computeROIRadar(d, devs));
+
+  // Draw grid + labels first (from first dev)
+  drawRadar(ctx, cx, cy, r, allROI[0], 'rgba(0,0,0,0)', 0, true, false);
+
+  // Overlay each dev
+  allROI.forEach((roi, i) => {
+    drawRadar(ctx, cx, cy, r, roi, DEV_COLORS[i % DEV_COLORS.length], 0.1, false, false);
+  });
+
+  // Legend
+  const leg = document.getElementById(legendId);
+  if (leg) {
+    leg.innerHTML = devs.map((d, i) => `<div class="legend-item"><div class="legend-dot" style="background:${DEV_COLORS[i % DEV_COLORS.length]}"></div><span style="font-weight:600">${esc(d.devId)}</span></div>`).join('');
+  }
+}
+
+/* === FEATURE 4: Cache Efficiency Over Time Chart === */
+function renderCacheEfficiencyChart(canvasId, daily, totalCacheRead, totalTokens) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !daily.length) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.parentElement.clientWidth - 48;
+  const h = 180;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
+
+  const startX = 44, chartH = h - 36;
+
+  // Compute daily cache hit ratio
+  const ratios = daily.map(d => {
+    const total = (d.tokens || 0);
+    return total > 0 ? ((d.cacheReadTokens || 0) / total) * 100 : 0;
+  });
+
+  // Team avg cache hit ratio (from PROD_DATA)
+  const teamAvg = PROD_DATA.team.cacheHitRate || 0;
+
+  // Savings badge: $2.70/MTok saving rate
+  const savingRate = 2.70 / 1e6;
+  const totalSavings = (totalCacheRead || 0) * savingRate;
+
+  const barW = Math.max(4, Math.min(24, (w - 80) / daily.length - 2));
+  const gap = 2;
+
+  // Y-axis
+  ctx.font = '500 9px Inter, system-ui'; ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const val = 25 * i;
+    const y = chartH - (chartH * i / 4) + 8;
+    ctx.fillText(val + '%', startX - 8, y + 3);
+    ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(startX, y); ctx.lineTo(w - 10, y); ctx.stroke();
+  }
+
+  // Team avg reference line
+  const refY = chartH + 8 - (teamAvg / 100) * chartH;
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(startX, refY); ctx.lineTo(w - 10, refY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'left'; ctx.font = '500 8px Inter, system-ui';
+  ctx.fillText('Team avg: ' + teamAvg.toFixed(1) + '%', startX + 4, refY - 4);
+
+  // Area fill
+  ctx.beginPath();
+  ctx.moveTo(startX, chartH + 8);
+  daily.forEach((d, i) => {
+    const x = startX + i * (barW + gap) + barW / 2;
+    const y = chartH + 8 - (ratios[i] / 100) * chartH;
+    ctx.lineTo(x, y);
+  });
+  ctx.lineTo(startX + (daily.length - 1) * (barW + gap) + barW / 2, chartH + 8);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(245,158,11,0.15)';
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = '#F59E0B'; ctx.lineWidth = 2;
+  daily.forEach((d, i) => {
+    const x = startX + i * (barW + gap) + barW / 2;
+    const y = chartH + 8 - (ratios[i] / 100) * chartH;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Dots
+  ctx.fillStyle = '#F59E0B';
+  daily.forEach((d, i) => {
+    if (daily.length <= 60 || i % Math.max(1, Math.floor(daily.length / 30)) === 0) {
+      const x = startX + i * (barW + gap) + barW / 2;
+      const y = chartH + 8 - (ratios[i] / 100) * chartH;
+      ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+  });
+
+  // X-axis labels
+  ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'center'; ctx.font = '500 9px Inter, system-ui';
+  const step = Math.max(1, Math.floor(daily.length / 7));
+  daily.forEach((d, i) => {
+    if (i % step === 0 || i === daily.length - 1)
+      ctx.fillText(formatDate(d.date), startX + i * (barW + gap) + barW / 2, chartH + 24);
+  });
+
+  // Savings badge
+  ctx.fillStyle = '#F59E0B'; ctx.font = '700 11px Inter, system-ui'; ctx.textAlign = 'right';
+  const badgeText = '$' + totalSavings.toFixed(2) + ' saved';
+  const tw = ctx.measureText(badgeText).width;
+  ctx.fillStyle = 'rgba(245,158,11,0.1)';
+  roundedRect(ctx, w - tw - 28, 2, tw + 16, 20, 6);
+  ctx.fill();
+  ctx.fillStyle = '#B45309'; ctx.textAlign = 'center';
+  ctx.fillText(badgeText, w - tw / 2 - 20, 16);
+
+  // Tooltip
+  let cumSavings = 0;
+  const cumSavingsArr = daily.map(d => { cumSavings += (d.cacheReadTokens || 0) * savingRate; return cumSavings; });
+  setupChartTooltip(canvas, daily, startX, barW, gap, chartH, (d, i) => {
+    return `${d.date} &mdash; Cache hit: ${ratios[i].toFixed(1)}%, Cumulative savings: $${cumSavingsArr[i].toFixed(2)}`;
+  });
+}
+
+/* === FEATURE 5: Session Depth Histogram === */
+function renderSessionHistogram(canvasId, statsId, sessions) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !sessions.length) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.parentElement.clientWidth - 48;
+  const h = 160;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
+
+  const depths = sessions.map(s => s.queryCount || 0);
+  const bins = [
+    { label: '1', min: 1, max: 1, count: 0 },
+    { label: '2-3', min: 2, max: 3, count: 0 },
+    { label: '4-6', min: 4, max: 6, count: 0 },
+    { label: '7-10', min: 7, max: 10, count: 0 },
+    { label: '11-20', min: 11, max: 20, count: 0 },
+    { label: '20+', min: 21, max: Infinity, count: 0 },
+  ];
+  for (const q of depths) {
+    for (const b of bins) {
+      if (q >= b.min && q <= b.max) { b.count++; break; }
+    }
+  }
+  const maxCount = Math.max(...bins.map(b => b.count), 1);
+
+  const startX = 60, barH = 18, gapY = 6, chartW = w - startX - 60;
+
+  bins.forEach((b, i) => {
+    const y = 10 + i * (barH + gapY);
+    const bW = Math.max(2, (b.count / maxCount) * chartW);
+
+    // Label
+    ctx.font = '600 11px Inter, system-ui'; ctx.fillStyle = '#475569'; ctx.textAlign = 'right';
+    ctx.fillText(b.label, startX - 10, y + barH / 2 + 4);
+
+    // Bar
+    ctx.fillStyle = '#8B5CF6';
+    ctx.beginPath(); roundedRect(ctx, startX, y, bW, barH, 4); ctx.fill();
+
+    // Count
+    ctx.font = '600 11px Inter, system-ui'; ctx.fillStyle = '#475569'; ctx.textAlign = 'left';
+    ctx.fillText(b.count, startX + bW + 6, y + barH / 2 + 4);
+  });
+
+  // Stats
+  const sorted = [...depths].sort((a, b) => a - b);
+  const avg = sorted.length ? (sorted.reduce((a, b) => a + b, 0) / sorted.length).toFixed(1) : 0;
+  const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
+  const p90 = sorted.length ? sorted[Math.floor(sorted.length * 0.9)] : 0;
+
+  const statsEl = document.getElementById(statsId);
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <div style="display:flex;gap:24px;font-size:12px;color:var(--text-secondary);font-weight:500">
+        <span><strong style="color:var(--text);font-size:16px;font-weight:800">${avg}</strong> avg</span>
+        <span><strong style="color:var(--text);font-size:16px;font-weight:800">${median}</strong> median</span>
+        <span><strong style="color:var(--text);font-size:16px;font-weight:800">${p90}</strong> p90</span>
+      </div>
+    `;
+  }
+}
+
+/* === FEATURE 7: Streak Calendar View === */
+function renderStreakCalendar(canvasId, statsId, sessions) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  // Build day->session count map from ALL sessions (not just filtered for longest streak)
+  const dayCount = {};
+  for (const s of sessions) {
+    if (s.date && s.date !== 'unknown') dayCount[s.date] = (dayCount[s.date] || 0) + 1;
+  }
+
+  const today = new Date();
+  const allDates = Object.keys(dayCount).sort();
+  const firstDate = allDates.length > 0 ? new Date(allDates[0]) : new Date(today);
+
+  // Total days from first active date to today
+  const days = Math.ceil((today - firstDate) / 86400000) + 1;
+  const cols = Math.min(30, days); // max 30 columns, wrap into rows
+  const rows = Math.ceil(days / cols);
+
+  const cellSize = 14, cellGap = 3;
+  const maxW = canvas.parentElement.clientWidth - 20;
+  const neededW = 10 + cols * (cellSize + cellGap) + 10;
+  const scale = neededW > maxW ? maxW / neededW : 1;
+  const cs = Math.max(6, Math.floor(cellSize * scale)), cg = Math.max(1, Math.floor(cellGap * scale));
+
+  const leftPad = 10, topPad = 6;
+  const w = leftPad + cols * (cs + cg) + 10;
+  const h = topPad + rows * (cs + cg) + 10;
+
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
+
+  const startDate = new Date(firstDate);
+
+  let totalActiveDays = 0;
+  const maxSess = Math.max(...Object.values(dayCount), 1);
+  const l1 = maxSess * 0.33, l2 = maxSess * 0.66;
+
+  for (let i = 0; i < days; i++) {
+    const dt = new Date(startDate);
+    dt.setDate(dt.getDate() + i);
+    const dateStr = toISO(dt);
+    const count = dayCount[dateStr] || 0;
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = leftPad + col * (cs + cg);
+    const y = topPad + row * (cs + cg);
+
+    if (dt > today) {
+      ctx.fillStyle = '#E2E8F0';
+    } else if (count === 0) {
+      ctx.fillStyle = '#F1F5F9';
+    } else {
+      totalActiveDays++;
+      if (count > l2) ctx.fillStyle = '#00695C';
+      else if (count > l1) ctx.fillStyle = '#00897B';
+      else ctx.fillStyle = '#4DB6AC';
+    }
+
+    ctx.beginPath();
+    ctx.arc(x + cs / 2, y + cs / 2, cs / 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Compute streaks from ALL session history
+  const allDays = Object.keys(dayCount).sort();
+  let currentStreak = 0, longestStreak = 0, tempStreak = 1;
+
+  // Helper: check if gap between two dates only contains weekend days
+  function gapIsOnlyWeekends(prev, curr) {
+    const diffDays = (curr - prev) / 86400000;
+    for (let d = 1; d < diffDays; d++) {
+      const between = new Date(prev.getTime() + d * 86400000);
+      const dow = between.getDay();
+      if (dow !== 0 && dow !== 6) return false;
+    }
+    return true;
+  }
+
+  // Longest streak (weekends don't break streaks)
+  for (let i = 1; i < allDays.length; i++) {
+    const prev = new Date(allDays[i - 1]), curr = new Date(allDays[i]);
+    const diff = (curr - prev) / 86400000;
+    if (diff <= 1 || gapIsOnlyWeekends(prev, curr)) tempStreak++;
+    else { longestStreak = Math.max(longestStreak, tempStreak); tempStreak = 1; }
+  }
+  longestStreak = Math.max(longestStreak, tempStreak);
+
+  // Current streak (from most recent day going backwards, weekends don't break)
+  if (allDays.length > 0) {
+    currentStreak = 1;
+    for (let i = allDays.length - 1; i > 0; i--) {
+      const prev = new Date(allDays[i - 1]), curr = new Date(allDays[i]);
+      const diff = (curr - prev) / 86400000;
+      if (diff <= 1 || gapIsOnlyWeekends(prev, curr)) currentStreak++;
+      else break;
+    }
+  }
+
+  const statsEl = document.getElementById(statsId);
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <div><span class="streak-stat-val">${currentStreak}</span>Current streak (days)</div>
+      <div><span class="streak-stat-val">${longestStreak}</span>Longest streak (days)</div>
+      <div><span class="streak-stat-val">${totalActiveDays}</span>Active days (${days}d range)</div>
+    `;
+  }
+}
+
+// --- Shared chart tooltip helper ---
+function setupChartTooltip(canvas, data, startX, barW, gap, chartH, formatFn) {
+  const tooltip = document.getElementById('chartTooltip');
+  const dpr = window.devicePixelRatio || 1;
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / dpr) / rect.width / dpr;
+    const idx = Math.floor((mx - startX) / (barW + gap));
+    if (idx >= 0 && idx < data.length) {
+      tooltip.innerHTML = formatFn(data[idx], idx);
+      tooltip.style.display = 'block';
+      tooltip.style.left = (e.clientX + 12) + 'px';
+      tooltip.style.top = (e.clientY - 10) + 'px';
+    } else {
+      tooltip.style.display = 'none';
+    }
+  };
+  canvas.onmouseleave = () => { tooltip.style.display = 'none'; };
+}
+
 function roundedRect(ctx, x, y, w, h, r) {
   if (h <= 0) return;
   r = Math.min(r, h/2, w/2);
@@ -640,6 +1645,140 @@ function roundedRect(ctx, x, y, w, h, r) {
   ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
   ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
   ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+}
+
+/* === FEATURE 4c: Dismiss inactive alert === */
+function dismissInactiveAlert() {
+  inactiveAlertDismissed = true;
+  const el = document.getElementById('inactiveAlert');
+  if (el) el.remove();
+}
+
+function dismissGuide() {
+  gettingStartedDismissed = true;
+  localStorage.setItem('cs_guide_dismissed', '1');
+  const el = document.getElementById('gettingStarted');
+  if (el) el.style.transition = 'opacity 0.3s, transform 0.3s';
+  if (el) { el.style.opacity = '0'; el.style.transform = 'translateY(-10px)'; setTimeout(() => el.remove(), 300); }
+}
+
+/* === FEATURE 3c: Health History Line Chart === */
+function renderHealthHistoryChart(canvasId, legendId, history) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !history || history.length < 2) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.parentElement.clientWidth - 48;
+  const h = 220;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
+
+  const startX = 44, chartH = h - 36, rightMargin = 10;
+
+  // Collect all dev names
+  const devNames = new Set();
+  for (const entry of history) {
+    if (entry.devScores) Object.keys(entry.devScores).forEach(n => devNames.add(n));
+  }
+  const devList = [...devNames];
+
+  // Y-axis (0-100)
+  ctx.font = '500 9px Inter, system-ui'; ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const val = 25 * i;
+    const y = chartH - (chartH * i / 4) + 8;
+    ctx.fillText(val, startX - 8, y + 3);
+    ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(startX, y); ctx.lineTo(w - rightMargin, y); ctx.stroke();
+  }
+
+  // Target reference line at 70
+  const refY = chartH + 8 - (70 / 100) * chartH;
+  ctx.setLineDash([6, 4]);
+  ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(startX, refY); ctx.lineTo(w - rightMargin, refY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'left'; ctx.font = '500 8px Inter, system-ui';
+  ctx.fillText('Target: 70', startX + 4, refY - 4);
+
+  const pointSpacing = (w - startX - rightMargin) / Math.max(1, history.length - 1);
+
+  // Draw dev lines (semi-transparent)
+  devList.forEach((devName, di) => {
+    const color = DEV_COLORS[di % DEV_COLORS.length];
+    ctx.beginPath();
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.4;
+    let started = false;
+    history.forEach((entry, i) => {
+      const score = entry.devScores && entry.devScores[devName];
+      if (score == null) return;
+      const x = startX + i * pointSpacing;
+      const y = chartH + 8 - (score / 100) * chartH;
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  });
+
+  // Draw team average line (bold) with area fill
+  ctx.beginPath();
+  const teamPoints = [];
+  history.forEach((entry, i) => {
+    const x = startX + i * pointSpacing;
+    const y = chartH + 8 - (entry.teamScore / 100) * chartH;
+    teamPoints.push({ x, y });
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+
+  // Area fill under team line
+  if (teamPoints.length >= 2) {
+    const areaPath = new Path2D();
+    areaPath.moveTo(teamPoints[0].x, chartH + 8);
+    for (const p of teamPoints) areaPath.lineTo(p.x, p.y);
+    areaPath.lineTo(teamPoints[teamPoints.length - 1].x, chartH + 8);
+    areaPath.closePath();
+    ctx.fillStyle = 'rgba(99,102,241,0.08)';
+    ctx.fill(areaPath);
+  }
+
+  // Team line stroke
+  ctx.beginPath();
+  teamPoints.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+  ctx.strokeStyle = '#6366F1'; ctx.lineWidth = 2.5; ctx.stroke();
+
+  // Team dots
+  ctx.fillStyle = '#6366F1';
+  teamPoints.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill(); });
+
+  // X-axis labels
+  ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'center'; ctx.font = '500 9px Inter, system-ui';
+  const step = Math.max(1, Math.floor(history.length / 7));
+  history.forEach((entry, i) => {
+    if (i % step === 0 || i === history.length - 1)
+      ctx.fillText(formatDate(entry.date), startX + i * pointSpacing, chartH + 24);
+  });
+
+  // Tooltip
+  setupChartTooltip(canvas, history, startX, pointSpacing - 2, 2, chartH, (entry, i) => {
+    let tip = entry.date + ' &mdash; Team: ' + entry.teamScore;
+    if (entry.devScores) {
+      for (const [name, score] of Object.entries(entry.devScores)) {
+        tip += ', ' + name + ': ' + score;
+      }
+    }
+    return tip;
+  });
+
+  // Legend
+  const leg = document.getElementById(legendId);
+  if (leg) {
+    let html = '<div class="legend-item"><div class="legend-dot" style="background:#6366F1"></div><span style="font-weight:700">Team Average</span></div>';
+    devList.forEach((name, i) => {
+      html += `<div class="legend-item"><div class="legend-dot" style="background:${DEV_COLORS[i % DEV_COLORS.length]};opacity:0.5"></div><span>${esc(name)}</span></div>`;
+    });
+    leg.innerHTML = html;
+  }
 }
 
 // Init

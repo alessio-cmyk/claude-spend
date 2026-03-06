@@ -42,6 +42,47 @@ claude-spend --port 8080   # custom port (default: 3456)
 claude-spend --no-open     # don't auto-open browser
 ```
 
+## Team Dashboard
+
+### Start the server (one person runs this)
+
+```bash
+git clone https://github.com/alessio-cmyk/claude-spend.git
+cd claude-spend
+npm install
+node src/team-server.js
+```
+
+### Adding team members (no cloning needed)
+
+Generate API keys from a user list (optional — without this, anyone can sync):
+
+```bash
+node src/generate-keys.js users
+```
+
+Each team member just runs the command from the output:
+
+```bash
+npx claude-spend --sync --key <your-key> --server http://your-server:3457
+```
+
+The key identifies who you are — no need to pass `--name`. To sync daily, add an alias:
+
+```bash
+alias claude-sync='npx claude-spend --sync --key <your-key> --server http://your-server:3457'
+```
+
+Then just run `claude-sync` each day.
+
+### Interactive setup wizard (optional)
+
+If you cloned the repo, you can also run the setup wizard:
+
+```bash
+node src/setup.js
+```
+
 ## Privacy
 
 All data stays local. claude-spend reads files from `~/.claude/` on your machine and serves a dashboard on localhost. No data is sent anywhere.

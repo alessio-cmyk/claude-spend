@@ -1,0 +1,134 @@
+name: Deploy to App Runner
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPO: claude-spend
+  APP_RUNNER_SERVICE: claude-spend
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $REGISTRY/$ECR_REPO:$IMAGE_TAG -t $REGISTRY/$ECR_REPO:latest .
+          docker push $REGISTRY/$ECR_REPO:$IMAGE_TAG
+          docker push $REGISTRY/$ECR_REPO:latest
+
+      - name: Deploy to App Runner
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Check if service exists
+          SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='${APP_RUNNER_SERVICE}'].ServiceArn | [0]" --output text 2>/dev/null)
+
+          if [ "$SERVICE_ARN" = "None" ] || [ -z "$SERVICE_ARN" ]; then
+            echo "Creating new App Runner service..."
+            aws apprunner create-service \
+              --service-name $APP_RUNNER_SERVICE \
+              --source-configuration '{
+                "AuthenticationConfiguration": {
+                  "AccessRoleArn": "arn:aws:iam::625032307702:role/AppRunnerECRAccessRole"
+                },
+                "AutoDeploymentsEnabled": false,
+                "ImageRepository": {
+                  "ImageIdentifier": "'"$REGISTRY/$ECR_REPO:$IMAGE_TAG"'",
+                  "ImageRepositoryType": "ECR",
+                  "ImageConfiguration": {
+                    "Port": "3457",
+                    "RuntimeEnvironmentVariables": {
+                      "AWS_REGION": "us-east-1",
+                      "SSM_PREFIX": "/claude-spend/",
+                      "PORT": "3457"
+                    }
+                  }
+                }
+              }' \
+              --instance-configuration '{
+                "Cpu": "0.25 vCPU",
+                "Memory": "0.5 GB",
+                "InstanceRoleArn": "arn:aws:iam::625032307702:role/AppRunnerInstanceRole"
+              }' \
+              --network-configuration '{
+                "EgressConfiguration": {
+                  "EgressType": "VPC",
+                  "VpcConnectorArn": "arn:aws:apprunner:us-east-1:625032307702:vpcconnector/apprunner-private-nat-connector/1/cdccc1b369364df0a62bc30f9b4aa72b"
+                }
+              }' \
+              --health-check-configuration '{
+                "Protocol": "HTTP",
+                "Path": "/health",
+                "Interval": 10,
+                "Timeout": 5,
+                "HealthyThreshold": 1,
+                "UnhealthyThreshold": 3
+              }'
+          else
+            echo "Updating existing service: $SERVICE_ARN"
+            aws apprunner update-service \
+              --service-arn "$SERVICE_ARN" \
+              --source-configuration '{
+                "AuthenticationConfiguration": {
+                  "AccessRoleArn": "arn:aws:iam::625032307702:role/AppRunnerECRAccessRole"
+                },
+                "AutoDeploymentsEnabled": false,
+                "ImageRepository": {
+                  "ImageIdentifier": "'"$REGISTRY/$ECR_REPO:$IMAGE_TAG"'",
+                  "ImageRepositoryType": "ECR",
+                  "ImageConfiguration": {
+                    "Port": "3457",
+                    "RuntimeEnvironmentVariables": {
+                      "AWS_REGION": "us-east-1",
+                      "SSM_PREFIX": "/claude-spend/",
+                      "PORT": "3457"
+                    }
+                  }
+                }
+              }' \
+              --network-configuration '{
+                "EgressConfiguration": {
+                  "EgressType": "VPC",
+                  "VpcConnectorArn": "arn:aws:apprunner:us-east-1:625032307702:vpcconnector/apprunner-private-nat-connector/1/cdccc1b369364df0a62bc30f9b4aa72b"
+                }
+              }'
+          fi
+
+      - name: Wait for deployment
+        run: |
+          SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='${APP_RUNNER_SERVICE}'].ServiceArn | [0]" --output text)
+          echo "Waiting for service to stabilize..."
+          for i in $(seq 1 30); do
+            STATUS=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query "Service.Status" --output text)
+            URL=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query "Service.ServiceUrl" --output text)
+            echo "  Status: $STATUS"
+            if [ "$STATUS" = "RUNNING" ]; then
+              echo "Deployed! https://$URL"
+              break
+            fi
+            sleep 10
+          done

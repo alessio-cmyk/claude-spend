@@ -16,14 +16,14 @@ Options:
   --no-open             Don't auto-open browser
   --sync                Sync your data to a team server
   --server <url>        Team server URL (default: http://localhost:3457)
-  --name <devId>        Your developer name for the team leaderboard
+  --key <apiKey>        API key for team sync (provided by your admin)
+  --name <devId>        Override developer name (optional if using --key)
   --help, -h            Show this help message
 
 Examples:
   npx claude-spend                              Open personal dashboard
   claude-spend --port 8080                      Use custom port
-  claude-spend --sync --name alice              Sync to local team server
-  claude-spend --sync --name alice --server https://team.example.com
+  claude-spend --sync --key abc123 --server https://team.example.com
 `);
   process.exit(0);
 }
@@ -31,17 +31,30 @@ Examples:
 // --- Sync mode ---
 if (args.includes('--sync')) {
   const nameIdx = args.indexOf('--name');
-  const devId = nameIdx !== -1 ? args[nameIdx + 1] : null;
-  if (!devId) {
-    console.error('Error: --sync requires --name <your-name>');
-    process.exit(1);
-  }
+  let devId = nameIdx !== -1 ? args[nameIdx + 1] : null;
 
   const serverIdx = args.indexOf('--server');
   const serverUrl = serverIdx !== -1 ? args[serverIdx + 1] : 'http://localhost:3457';
 
+  const keyIdx = args.indexOf('--key');
+  const apiKey = keyIdx !== -1 ? args[keyIdx + 1] : null;
+
+  if (!devId && !apiKey) {
+    console.error('Error: --sync requires --key <your-key> or --name <your-name>');
+    process.exit(1);
+  }
+
   (async () => {
     try {
+      // Resolve devId from key if not provided
+      if (!devId && apiKey) {
+        const { resolveDevId } = require('./sync');
+        console.log(`\n  Looking up your identity...`);
+        const resolved = await resolveDevId(serverUrl, apiKey);
+        devId = resolved.devId;
+        console.log(`  Authenticated as ${resolved.name} (${devId})`);
+      }
+
       console.log(`\n  Parsing your Claude Code sessions...`);
       const { parseAllSessions } = require('./parser');
       const data = await parseAllSessions();
@@ -49,7 +62,7 @@ if (args.includes('--sync')) {
 
       console.log(`  Syncing to ${serverUrl} as "${devId}"...`);
       const { syncToTeam } = require('./sync');
-      const result = await syncToTeam(serverUrl, devId, data);
+      const result = await syncToTeam(serverUrl, devId, data, apiKey);
       console.log(`  Synced! Server now has ${result.sessionCount} sessions for ${devId}`);
       console.log(`  View leaderboard: ${serverUrl}\n`);
     } catch (err) {

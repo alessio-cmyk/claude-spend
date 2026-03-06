@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "team-server": "node src/team-server.js"
+    "team-server": "node src/team-server.js",
+    "s3:seed": "node -e \"const fs=require('fs'),p=require('path'),e=p.join(__dirname,'.env');if(fs.existsSync(e))for(const l of fs.readFileSync(e,'utf-8').split('\\n')){const m=l.match(/^\\s*([A-Z_][A-Z0-9_]*)\\s*=\\s*(.+?)\\s*$/);if(m&&!process.env[m[1]])process.env[m[1]]=m[2]};require('./src/team/s3').uploadAll().then(()=>console.log('Done')).catch(e=>{console.error(e);process.exit(1)})\""
   },
   "keywords": [
     "claude",
@@ -27,6 +28,8 @@
     "url": "https://github.com/writetoaniketparihar-collab/claude-spend.git"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1003.0",
+    "@aws-sdk/client-ssm": "^3.1003.0",
     "express": "^4.21.0",
     "open": "^10.1.0"
   }
