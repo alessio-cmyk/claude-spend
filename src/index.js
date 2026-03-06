@@ -28,6 +28,12 @@ Examples:
   process.exit(0);
 }
 
+// --- Setup mode ---
+if (args.includes('setup')) {
+  require('./setup');
+  return;
+}
+
 // --- Sync mode ---
 if (args.includes('--sync')) {
   const nameIdx = args.indexOf('--name');
