@@ -94,4 +94,18 @@ fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 
 console.log(`  Settings: ${settingsPath}`);
 console.log(`  Server:   ${serverUrl}`);
-console.log(`\n  Your Claude Code sessions will now auto-sync when conversations end.\n`);
+console.log(`\n  Your Claude Code sessions will now auto-sync when conversations end.`);
+
+// Run first sync immediately
+console.log('\n  Running first sync...\n');
+const { execSync } = require('child_process');
+try {
+  const out = execSync(
+    `node ${JSON.stringify(path.join(__dirname, 'index.js'))} --sync --key ${apiKey} --server ${serverUrl}`,
+    { encoding: 'utf-8', timeout: 120000 }
+  );
+  process.stdout.write(out);
+} catch (err) {
+  const msg = err.stdout || err.stderr || err.message;
+  console.log(`  First sync failed: ${msg.trim()}\n  You can retry manually or it will sync after your next Claude conversation.\n`);
+}
