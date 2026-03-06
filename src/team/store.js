@@ -71,7 +71,7 @@ function loadDeveloper(devId) {
 }
 
 /* === FEATURE 3: Files to exclude from developer listings === */
-const NON_DEV_FILES = new Set(['health-history.json']);
+const NON_DEV_FILES = new Set(['health-history.json', 'allowlist.json']);
 
 function listDevelopers() {
   ensureDir();
