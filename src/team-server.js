@@ -22,10 +22,15 @@ const port = portIndex !== -1 ? parseInt(args[portIndex + 1], 10) : parseInt(pro
 
 async function start() {
   // Download data from S3 before starting (App Runner has ephemeral storage)
+  console.log(`[Boot] S3_BUCKET=${process.env.S3_BUCKET || '(not set)'}, S3 enabled=${s3Enabled()}`);
+  console.log(`[Boot] CLAUDE_SPEND_DATA=${process.env.CLAUDE_SPEND_DATA || '(not set)'}, cwd=${process.cwd()}`);
   if (s3Enabled()) {
     try { await downloadAll(); }
     catch (err) { console.error('[S3] Initial download failed:', err.message); }
   }
+  // Log allowlist status
+  const alPath = path.join(process.env.CLAUDE_SPEND_DATA || path.join(process.cwd(), 'data', 'team'), 'allowlist.json');
+  console.log(`[Boot] Allowlist path: ${alPath}, exists: ${fs.existsSync(alPath)}`);
 
   const app = express();
 
