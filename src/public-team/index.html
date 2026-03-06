@@ -424,14 +424,7 @@ function renderLeaderboard() {
   /* Getting Started guide */
   let gsHtml = '';
   if (!gettingStartedDismissed) {
-    const serverHost = window.location.hostname === 'localhost' ? 'http://localhost:' + window.location.port : window.location.origin;
-    const syncCmd = AUTH_ENABLED
-      ? 'npx claude-spend --sync --key &lt;your-key&gt; --server ' + esc(serverHost)
-      : 'npx claude-spend --sync --name YourName --server ' + esc(serverHost);
-    const aliasCmd = AUTH_ENABLED
-      ? "alias claude-sync='npx claude-spend --sync --key &lt;your-key&gt; --server " + esc(serverHost) + "'"
-      : "alias claude-sync='npx claude-spend --sync --name YourName --server " + esc(serverHost) + "'";
-    const keyNote = AUTH_ENABLED ? '<p class="gs-note" style="margin-top:6px"><strong>Your admin will give you a personal API key.</strong> Your name is linked to the key automatically.</p>' : '';
+    const setupCmd = 'npx --yes github:alessio-cmyk/claude-spend setup --key &lt;your-key&gt;';
     gsHtml = `<div class="getting-started animate delay-2" id="gettingStarted">
       <div class="getting-started-header">
         <h3><span class="gs-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span> Getting Started — Add Your Team</h3>
@@ -440,33 +433,30 @@ function renderLeaderboard() {
       <div class="gs-steps">
         <div class="gs-step">
           <div class="gs-step-num">1</div>
-          <h4>First Sync (one command)</h4>
-          <p>Each team member runs this — no cloning or installing needed.</p>
-          <code class="gs-cmd">${syncCmd}</code>
-          <p class="gs-note">Reads local ~/.claude files and sends aggregated token counts to this server.</p>
-          ${keyNote}
+          <h4>One Command Setup</h4>
+          <p>Each team member runs this once — no cloning or installing needed.</p>
+          <code class="gs-cmd">${setupCmd}</code>
+          <p class="gs-note">This installs an auto-sync hook, syncs your data immediately, and you're done.</p>
+          <p class="gs-note" style="margin-top:6px"><strong>Your admin will give you a personal API key.</strong> Your name is linked to the key automatically.</p>
         </div>
         <div class="gs-step">
           <div class="gs-step-num">2</div>
-          <h4>Sync Daily</h4>
-          <p>Add a shell alias so syncing takes one command every day.</p>
-          <code class="gs-cmd">${aliasCmd}</code>
-          <div class="gs-or">— add to ~/.zshrc or ~/.bashrc —</div>
-          <p class="gs-note">Then just run <strong>claude-sync</strong> daily to keep the dashboard up to date.</p>
+          <h4>Auto-Sync</h4>
+          <p>After setup, your data syncs <strong>automatically</strong> every time a Claude Code conversation ends.</p>
+          <p class="gs-note" style="margin-top:8px">No aliases, no cron jobs, no manual syncing needed. The setup command adds a Claude Code hook that handles everything.</p>
         </div>
         <div class="gs-step">
           <div class="gs-step-num">3</div>
           <h4>That's It</h4>
           <p>Once synced, each member appears on the leaderboard and productivity tabs automatically.</p>
-          <p style="font-size:12px;color:var(--text-secondary);margin-top:8px"><strong>Running the server?</strong> The admin clones the repo once:</p>
-          <code class="gs-cmd">git clone https://github.com/alessio-cmyk/claude-spend.git<br>cd claude-spend && npm install<br>node src/team-server.js</code>
+          <p class="gs-note" style="margin-top:8px">To remove the hook later, run:<br><code class="gs-cmd" style="margin-top:4px">npx --yes github:alessio-cmyk/claude-spend setup --remove</code></p>
         </div>
       </div>
     </div>`;
   }
 
   if (!lb.length) {
-    document.getElementById('lbTable').innerHTML = gsHtml + `<div class="table-card"><div class="empty-state"><h3>No developers synced yet</h3><p>Run: <code>${syncCmd}</code></p></div></div>`;
+    document.getElementById('lbTable').innerHTML = gsHtml + `<div class="table-card"><div class="empty-state"><h3>No developers synced yet</h3><p>Run: <code>${setupCmd || 'npx --yes github:alessio-cmyk/claude-spend setup --key &lt;your-key&gt;'}</code></p></div></div>`;
     return;
   }
 
