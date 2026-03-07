@@ -384,7 +384,7 @@ function renderMainView(app) {
     </div>
     <div class="date-bar animate delay-1" id="dateBar"></div>
     <div id="content"></div>
-    <div class="footer">Made with <a href="https://claude.ai/code" target="_blank">Claude Code</a> by <a href="https://www.linkedin.com/in/writetoaniketparihar/" target="_blank">Aniket</a></div>
+    <div class="footer">Made with <a href="https://claude.ai/code" target="_blank">Claude Code</a> by <a href="https://www.linkedin.com/in/alessio-petrozziello/" target="_blank">Alessio</a></div>
   `;
   renderDateBar();
   if (currentTab === 'leaderboard') renderLeaderboard();
@@ -419,6 +419,7 @@ function renderLeaderboard() {
     </div>
     <div id="lbTable" class="animate delay-3"></div>
     <div id="teamHeatmap" class="animate delay-4"></div>
+    <div id="gettingStartedContainer"></div>
   `;
 
   /* Getting Started guide */
@@ -456,7 +457,8 @@ function renderLeaderboard() {
   }
 
   if (!lb.length) {
-    document.getElementById('lbTable').innerHTML = gsHtml + `<div class="table-card"><div class="empty-state"><h3>No developers synced yet</h3><p>Run: <code>${setupCmd || 'npx --yes github:alessio-cmyk/claude-spend setup --key &lt;your-key&gt;'}</code></p></div></div>`;
+    document.getElementById('lbTable').innerHTML = `<div class="table-card"><div class="empty-state"><h3>No developers synced yet</h3><p>Run: <code>${setupCmd || 'npx --yes github:alessio-cmyk/claude-spend setup --key &lt;your-key&gt;'}</code></p></div></div>`;
+    document.getElementById('gettingStartedContainer').innerHTML = gsHtml;
     return;
   }
 
@@ -484,8 +486,9 @@ function renderLeaderboard() {
   /* === FEATURE 4b: Build inactivity map for recency dots === */
   const inactMap = INACTIVITY_DATA || {};
 
+  document.getElementById('gettingStartedContainer').innerHTML = gsHtml;
+
   document.getElementById('lbTable').innerHTML = `
-    ${gsHtml}
     ${exportBtn}
     ${wowBannerHtml}
     <div class="table-card"><table>
@@ -705,7 +708,7 @@ async function renderDevView(app) {
     <div id="devHeatmap" class="animate delay-4"></div>
     <div id="devPromptsLog" class="animate delay-4"></div>
     <div id="devSessions" class="animate delay-4"></div>
-    <div class="footer">Made with <a href="https://claude.ai/code" target="_blank">Claude Code</a> by <a href="https://www.linkedin.com/in/writetoaniketparihar/" target="_blank">Aniket</a></div>
+    <div class="footer">Made with <a href="https://claude.ai/code" target="_blank">Claude Code</a> by <a href="https://www.linkedin.com/in/alessio-petrozziello/" target="_blank">Alessio</a></div>
   `;
   renderDateBar();
 
