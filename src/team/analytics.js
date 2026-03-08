@@ -17,9 +17,9 @@ function getProductivityAnalytics(fromDate, toDate) {
     if (sessions.length === 0) {
       devMetrics.push({
         devId: dev.devId, lastSync: dev.lastSync,
-        sessions: 0, queries: 0, totalTokens: 0, outputTokens: 0, cost: 0,
+        sessions: 0, queries: 0, prompts: 0, totalTokens: 0, outputTokens: 0, cost: 0,
         inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
-        avgTokensPerQuery: 0, avgQueriesPerSession: 0, avgSessionDepth: 0,
+        avgTokensPerQuery: 0, avgQueriesPerSession: 0, avgPromptsPerSession: 0, avgSessionDepth: 0,
         outputRatio: 0, cacheHitRate: 0,
         activeDays: 0, streak: 0, trend: 0,
         toolActivationRate: 0, changeVerificationRate: 0, uniqueTools: 0, topTools: [],
@@ -39,16 +39,18 @@ function getProductivityAnalytics(fromDate, toDate) {
       if (s._dailyBreakdown) {
         const sessionDays = new Set();
         for (const [day, stats] of Object.entries(s._dailyBreakdown)) {
-          if (!dailyMap[day]) dailyMap[day] = { date: day, tokens: 0, cost: 0, sessions: 0, queries: 0, outputTokens: 0, inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
+          if (!dailyMap[day]) dailyMap[day] = { date: day, tokens: 0, cost: 0, sessions: 0, queries: 0, prompts: 0, outputTokens: 0, inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
           dailyMap[day].tokens += stats.tokens || 0;
           dailyMap[day].cost += stats.cost || 0;
           dailyMap[day].queries += stats.queries || 0;
+          dailyMap[day].prompts += stats.prompts || 0;
           sessionDays.add(day);
 
-          if (!teamDaily[day]) teamDaily[day] = { date: day, tokens: 0, cost: 0, sessions: 0, queries: 0, activeDevs: new Set(), inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
+          if (!teamDaily[day]) teamDaily[day] = { date: day, tokens: 0, cost: 0, sessions: 0, queries: 0, prompts: 0, activeDevs: new Set(), inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
           teamDaily[day].tokens += stats.tokens || 0;
           teamDaily[day].cost += stats.cost || 0;
           teamDaily[day].queries += stats.queries || 0;
+          teamDaily[day].prompts += stats.prompts || 0;
           teamDaily[day].activeDevs.add(dev.devId);
         }
         for (const d of sessionDays) {
@@ -56,21 +58,23 @@ function getProductivityAnalytics(fromDate, toDate) {
           teamDaily[d].sessions += 1;
         }
       } else {
-        if (!dailyMap[s.date]) dailyMap[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0, outputTokens: 0, inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
+        if (!dailyMap[s.date]) dailyMap[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0, prompts: 0, outputTokens: 0, inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
         dailyMap[s.date].tokens += s.totalTokens || 0;
         dailyMap[s.date].cost += s.cost || 0;
         dailyMap[s.date].sessions += 1;
         dailyMap[s.date].queries += s.queryCount || 0;
+        dailyMap[s.date].prompts += s.promptCount || 0;
         dailyMap[s.date].outputTokens += s.outputTokens || 0;
         dailyMap[s.date].inputTokens += s.inputTokens || 0;
         dailyMap[s.date].cacheReadTokens += s.cacheReadTokens || 0;
         dailyMap[s.date].cacheCreationTokens += s.cacheCreationTokens || 0;
 
-        if (!teamDaily[s.date]) teamDaily[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0, activeDevs: new Set(), inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
+        if (!teamDaily[s.date]) teamDaily[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0, prompts: 0, activeDevs: new Set(), inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
         teamDaily[s.date].tokens += s.totalTokens || 0;
         teamDaily[s.date].cost += s.cost || 0;
         teamDaily[s.date].sessions += 1;
         teamDaily[s.date].queries += s.queryCount || 0;
+        teamDaily[s.date].prompts += s.promptCount || 0;
         teamDaily[s.date].activeDevs.add(dev.devId);
         teamDaily[s.date].inputTokens += s.inputTokens || 0;
         teamDaily[s.date].outputTokens += s.outputTokens || 0;
@@ -205,6 +209,7 @@ function getProductivityAnalytics(fromDate, toDate) {
       lastSync: dev.lastSync,
       sessions: sessions.length,
       queries: totals.totalQueries,
+      prompts: totals.totalPrompts || 0,
       totalTokens: totals.totalTokens,
       inputTokens: totals.totalInputTokens || 0,
       outputTokens: totals.totalOutputTokens || 0,
@@ -213,6 +218,7 @@ function getProductivityAnalytics(fromDate, toDate) {
       cost: totals.totalCost,
       avgTokensPerQuery: totals.totalQueries > 0 ? Math.round(totals.totalTokens / totals.totalQueries) : 0,
       avgQueriesPerSession: sessions.length > 0 ? Math.round(totals.totalQueries / sessions.length) : 0,
+      avgPromptsPerSession: sessions.length > 0 ? Math.round((totals.totalPrompts || 0) / sessions.length) : 0,
       avgSessionDepth: Math.round(avgSessionDepth),
       outputRatio: Math.round(outputRatio * 10000) / 100,
       cacheHitRate: Math.round(cacheHitRate * 10000) / 100,
@@ -252,6 +258,7 @@ function getProductivityAnalytics(fromDate, toDate) {
   const totalTokens = activeDevs.reduce((s, d) => s + d.totalTokens, 0);
   const totalCost = activeDevs.reduce((s, d) => s + d.cost, 0);
   const totalQueries = activeDevs.reduce((s, d) => s + d.queries, 0);
+  const totalPrompts = activeDevs.reduce((s, d) => s + d.prompts, 0);
   const totalSessions = activeDevs.reduce((s, d) => s + d.sessions, 0);
   const totalInputTokens = activeDevs.reduce((s, d) => s + d.inputTokens, 0);
   const totalOutputTokens = activeDevs.reduce((s, d) => s + d.outputTokens, 0);
@@ -263,11 +270,12 @@ function getProductivityAnalytics(fromDate, toDate) {
   return {
     team: {
       devCount: activeDevs.length,
-      totalTokens, totalCost, totalQueries, totalSessions, totalOutputTokens,
+      totalTokens, totalCost, totalQueries, totalPrompts, totalSessions, totalOutputTokens,
       outputRatio: teamBillableIO > 0 ? Math.round(totalOutputTokens / teamBillableIO * 10000) / 100 : 0,
       cacheHitRate: totalInput > 0 ? Math.round(totalCacheRead / totalInput * 10000) / 100 : 0,
       activeDays,
       avgQueriesPerDay: activeDays > 0 ? Math.round(totalQueries / activeDays) : 0,
+      avgPromptsPerDay: activeDays > 0 ? Math.round(totalPrompts / activeDays) : 0,
       avgCostPerDev: activeDevs.length > 0 ? Math.round(totalCost / activeDevs.length * 100) / 100 : 0,
     },
     developers: devMetrics.sort((a, b) => b.totalTokens - a.totalTokens),

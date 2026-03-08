@@ -244,7 +244,7 @@ function loadAllDevelopers() {
 function computeTotals(sessions) {
   let totalTokens = 0, totalInputTokens = 0, totalOutputTokens = 0;
   let totalCacheReadTokens = 0, totalCacheCreationTokens = 0;
-  let totalCost = 0, totalQueries = 0;
+  let totalCost = 0, totalQueries = 0, totalPrompts = 0;
 
   for (const s of sessions) {
     totalTokens += s.totalTokens || 0;
@@ -254,12 +254,13 @@ function computeTotals(sessions) {
     totalCacheCreationTokens += s.cacheCreationTokens || 0;
     totalCost += s.cost || 0;
     totalQueries += s.queryCount || 0;
+    totalPrompts += s.promptCount || 0;
   }
 
   return {
     totalTokens, totalInputTokens, totalOutputTokens,
     totalCacheReadTokens, totalCacheCreationTokens,
-    totalCost, totalQueries,
+    totalCost, totalQueries, totalPrompts,
     totalSessions: sessions.length,
   };
 }
@@ -272,21 +273,23 @@ function computeDailyUsage(sessions) {
     if (s._dailyBreakdown) {
       const days = new Set();
       for (const [day, stats] of Object.entries(s._dailyBreakdown)) {
-        if (!map[day]) map[day] = { date: day, tokens: 0, cost: 0, sessions: 0, queries: 0 };
+        if (!map[day]) map[day] = { date: day, tokens: 0, cost: 0, sessions: 0, queries: 0, prompts: 0 };
         map[day].tokens += stats.tokens || 0;
         map[day].cost += stats.cost || 0;
         map[day].queries += stats.queries || 0;
+        map[day].prompts += stats.prompts || 0;
         days.add(day);
       }
       // Count session once per day it was active
       for (const d of days) map[d].sessions += 1;
     } else {
       // Fallback: attribute all to session start date
-      if (!map[s.date]) map[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0 };
+      if (!map[s.date]) map[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0, prompts: 0 };
       map[s.date].tokens += s.totalTokens || 0;
       map[s.date].cost += s.cost || 0;
       map[s.date].sessions += 1;
       map[s.date].queries += s.queryCount || 0;
+      map[s.date].prompts += s.promptCount || 0;
     }
   }
   return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
@@ -317,16 +320,18 @@ function compactSession(s) {
     // Per-day breakdown from query timestamps
     const qDate = (q.assistantTimestamp || q.userTimestamp || '').split('T')[0] || s.date;
     if (qDate && qDate !== 'unknown') {
-      if (!dailyBreakdown[qDate]) dailyBreakdown[qDate] = { tokens: 0, cost: 0, queries: 0 };
+      if (!dailyBreakdown[qDate]) dailyBreakdown[qDate] = { tokens: 0, cost: 0, queries: 0, prompts: 0 };
       dailyBreakdown[qDate].tokens += q.totalTokens || 0;
       dailyBreakdown[qDate].cost += q.cost || 0;
       dailyBreakdown[qDate].queries += 1;
+      if (q.isNewPrompt) dailyBreakdown[qDate].prompts += 1;
     }
   }
   const lastQuery = s.queries[s.queries.length - 1];
   const lastDate = (lastQuery.assistantTimestamp || lastQuery.userTimestamp || '').split('T')[0] || s.date;
+  const promptCount = s.queries.filter(q => q.isNewPrompt).length;
   const { queries, ...rest } = s;
-  return { ...rest, lastDate, _models: models, _tools: tools, _hasToolCall: hasToolCall, _dailyBreakdown: dailyBreakdown };
+  return { ...rest, promptCount, lastDate, _models: models, _tools: tools, _hasToolCall: hasToolCall, _dailyBreakdown: dailyBreakdown };
 }
 
 function filterSessions(sessions, from, to) {
@@ -346,11 +351,12 @@ function filterSessions(sessions, from, to) {
       if (Object.keys(sliced).length === 0) return null;
 
       // Recompute aggregate fields from sliced days
-      let tokens = 0, cost = 0, queries = 0;
+      let tokens = 0, cost = 0, queries = 0, prompts = 0;
       for (const stats of Object.values(sliced)) {
         tokens += stats.tokens || 0;
         cost += stats.cost || 0;
         queries += stats.queries || 0;
+        prompts += stats.prompts || 0;
       }
 
       // Proportion ratio for fields not tracked per-day (models, tools, cache tokens)
@@ -362,6 +368,7 @@ function filterSessions(sessions, from, to) {
         totalTokens: tokens,
         cost,
         queryCount: queries,
+        promptCount: prompts,
         inputTokens: Math.round((s.inputTokens || 0) * ratio),
         outputTokens: Math.round((s.outputTokens || 0) * ratio),
         cacheReadTokens: Math.round((s.cacheReadTokens || 0) * ratio),
@@ -451,11 +458,12 @@ function loadHealthHistory(days) {
 
 // Compute totals from filtered daily usage (accurate for date-filtered multi-day sessions)
 function computeTotalsFromDaily(dailyUsage, sessions) {
-  let totalTokens = 0, totalCost = 0, totalQueries = 0;
+  let totalTokens = 0, totalCost = 0, totalQueries = 0, totalPrompts = 0;
   for (const d of dailyUsage) {
     totalTokens += d.tokens || 0;
     totalCost += d.cost || 0;
     totalQueries += d.queries || 0;
+    totalPrompts += d.prompts || 0;
   }
   return {
     totalTokens,
@@ -465,6 +473,7 @@ function computeTotalsFromDaily(dailyUsage, sessions) {
     totalCacheCreationTokens: 0,
     totalCost,
     totalQueries,
+    totalPrompts,
     totalSessions: sessions.length,
   };
 }

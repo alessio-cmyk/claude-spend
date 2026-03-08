@@ -490,7 +490,7 @@ function renderLeaderboard() {
   const avgPerDev = tt.totalDevs > 0 ? tt.totalCost / tt.totalDevs : 0;
   el.innerHTML = `
     <div class="stats-row animate delay-2">
-      ${[{l:'Developers',v:tt.totalDevs||0,s:'synced'},{l:'Total Queries',v:fmt(tt.totalQueries||0),s:fmtFull(tt.totalSessions||0)+' sessions'},{l:'Total Tokens',v:fmt(tt.totalTokens||0),s:'across all devs'},{l:'Total Cost',v:fmtCost(tt.totalCost||0),s:fmtCost(avgPerDev)+' per dev'}].map(c => `
+      ${[{l:'Developers',v:tt.totalDevs||0,s:'synced'},{l:'Prompts',v:fmt(tt.totalPrompts||tt.totalQueries||0),s:fmtFull(tt.totalSessions||0)+' sessions'},{l:'Total Tokens',v:fmt(tt.totalTokens||0),s:'across all devs'},{l:'Total Cost',v:fmtCost(tt.totalCost||0),s:fmtCost(avgPerDev)+' per dev'}].map(c => `
         <div class="stat-card"><div class="stat-label">${c.l}</div><div class="stat-value">${c.v}</div><div class="stat-sub">${c.s}</div></div>
       `).join('')}
     </div>
@@ -584,7 +584,7 @@ function renderLeaderboard() {
     ${exportBtn}
     ${wowBannerHtml}
     <div class="table-card"><table>
-      <thead><tr><th style="width:36px">#</th>${sortTh('Developer','devId',false)}${sortTh('Sessions','totalSessions',true)}${sortTh('Queries','totalQueries',true)}${sortTh('Tokens','totalTokens',true)}${sortTh('Cost','totalCost',true)}<th style="width:120px">Usage</th><th>WoW Trend</th><th style="width:36px">Sync</th></tr></thead>
+      <thead><tr><th style="width:36px">#</th>${sortTh('Developer','devId',false)}${sortTh('Sessions','totalSessions',true)}${sortTh('Prompts','totalPrompts',true)}${sortTh('Tokens','totalTokens',true)}${sortTh('Cost','totalCost',true)}<th style="width:120px">Usage</th><th>WoW Trend</th><th style="width:36px">Sync</th></tr></thead>
       <tbody>${lb.map((d,i) => {
         const wow = WOW_DATA && WOW_DATA.devDeltas && WOW_DATA.devDeltas[d.devId];
         const wowPct = wow ? wow.queries.pct : 0;
@@ -613,7 +613,7 @@ function renderLeaderboard() {
         <td><span class="rank-badge${i<3?' rank-'+(i+1):''}">${i+1}</span></td>
         <td style="font-weight:600" class="${nameMuted}">${esc(d.devId)}</td>
         <td class="token-num">${fmtFull(d.totalSessions)}</td>
-        <td class="token-num">${fmtFull(d.totalQueries)}</td>
+        <td class="token-num">${fmtFull(d.totalPrompts||d.totalQueries)}</td>
         <td class="token-num" style="font-weight:700">${fmt(d.totalTokens)}</td>
         <td class="token-num">${fmtCost(d.totalCost)}</td>
         <td><div class="bar-track"><div class="bar-fill" style="width:${(d.totalTokens/maxT*100).toFixed(1)}%;background:var(--indigo)"></div></div></td>
@@ -640,11 +640,11 @@ function renderLeaderboard() {
 /* === FEATURE 8: CSV Export === */
 function exportCSV() {
   const devs = PROD_DATA.developers.filter(d => d.sessions > 0);
-  const headers = ['Developer','TotalSessions','TotalQueries','TotalCost($)','AvgQueriesPerSession','CacheHitRate(%)','ToolActivationRate(%)','CurrentStreak(days)','LastActive','HealthScore(0-100)'];
+  const headers = ['Developer','TotalSessions','TotalPrompts','TotalCost($)','AvgPromptsPerSession','CacheHitRate(%)','ToolActivationRate(%)','CurrentStreak(days)','LastActive','HealthScore(0-100)'];
   const rows = devs.map(d => {
     const health = Math.round(computeHealth(d));
     const lastActive = d.dailyBreakdown.length ? d.dailyBreakdown[d.dailyBreakdown.length-1].date : '';
-    return csvRow([d.devId, d.sessions, d.queries, d.cost.toFixed(2), d.avgQueriesPerSession, d.cacheHitRate.toFixed(1), d.toolActivationRate, d.streak, lastActive, health]);
+    return csvRow([d.devId, d.sessions, d.prompts||d.queries, d.cost.toFixed(2), d.avgPromptsPerSession||d.avgQueriesPerSession, d.cacheHitRate.toFixed(1), d.toolActivationRate, d.streak, lastActive, health]);
   });
   const csv = [csvRow(headers), ...rows].join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
@@ -666,7 +666,7 @@ function renderProductivity() {
     <div class="stats-row stats-row-5 animate delay-2">
       ${[
         {l:'Active Devs',v:t.devCount,s:t.activeDays+' active days'},
-        {l:'Avg Queries/Day',v:fmtFull(t.avgQueriesPerDay),s:fmtFull(t.totalQueries)+' total'},
+        {l:'Avg Prompts/Day',v:fmtFull(t.avgPromptsPerDay||t.avgQueriesPerDay),s:fmtFull(t.totalPrompts||t.totalQueries)+' total'},
         {l:'Output Ratio',v:fmtPct(t.outputRatio),s:'of tokens are output'},
         {l:'Cache Hit Rate',v:fmtPct(t.cacheHitRate),s:'input tokens from cache'},
         {l:'Avg Cost/Dev',v:fmtCost(t.avgCostPerDev),s:fmtCost(t.totalCost)+' total'},
@@ -683,7 +683,7 @@ function renderProductivity() {
   document.getElementById('prodCharts').innerHTML = `
     <div class="chart-card"><h3>Team Daily Activity</h3><canvas id="teamDailyChart"></canvas>
       <div class="legend">
-        <div class="legend-item"><div class="legend-dot" style="background:var(--indigo)"></div>Queries</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--indigo)"></div>Prompts</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div>Cost ($)</div>
       </div>
     </div>
@@ -713,23 +713,23 @@ function renderProductivity() {
 
   // Developer productivity table
   if (devs.length) {
-    const maxQ = Math.max(...devs.map(d => d.queries), 1);
+    const maxQ = Math.max(...devs.map(d => d.prompts||d.queries), 1);
     document.getElementById('prodTable').innerHTML = `
       <div class="section-header">
         <div class="section-icon" style="background:linear-gradient(135deg,#E0E7FF,#C7D2FE)"><svg viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="2.5" stroke-linecap="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg></div>
         <div class="section-title">Developer Productivity</div>
       </div>
       <div class="table-card"><table class="prod-table">
-        <thead><tr><th>Developer</th><th style="text-align:right">Sessions</th><th style="text-align:right">Queries</th><th style="text-align:right">Depth</th><th style="text-align:right">Tools</th><th style="text-align:right">Cache</th><th style="text-align:right">Cost</th><th>Activity</th><th>Streak</th><th>Trend</th></tr></thead>
+        <thead><tr><th>Developer</th><th style="text-align:right">Sessions</th><th style="text-align:right">Prompts</th><th style="text-align:right">Depth</th><th style="text-align:right">Tools</th><th style="text-align:right">Cache</th><th style="text-align:right">Cost</th><th>Activity</th><th>Streak</th><th>Trend</th></tr></thead>
         <tbody>${devs.map(d => `<tr onclick="goToDev(${jsq(d.devId)})">
           <td class="dev-name">${esc(d.devId)}</td>
           <td class="token-num">${fmtFull(d.sessions)}</td>
-          <td class="token-num">${fmtFull(d.queries)}</td>
+          <td class="token-num">${fmtFull(d.prompts||d.queries)}</td>
           <td class="token-num">${d.avgSessionDepth}</td>
           <td class="token-num">${d.toolActivationRate}%</td>
           <td class="token-num">${fmtPct(d.cacheHitRate)}</td>
           <td class="token-num">${fmtCost(d.cost)}</td>
-          <td><div class="bar-track" style="width:80px"><div class="bar-fill" style="width:${(d.queries/maxQ*100).toFixed(1)}%;background:var(--indigo)"></div></div></td>
+          <td><div class="bar-track" style="width:80px"><div class="bar-fill" style="width:${((d.prompts||d.queries)/maxQ*100).toFixed(1)}%;background:var(--indigo)"></div></div></td>
           <td class="token-num">${d.streak}d</td>
           <td>${trendBadge(d.trend)}</td>
         </tr>`).join('')}</tbody>
@@ -819,7 +819,7 @@ async function renderDevView(app) {
   // KPIs - 2 rows
   document.getElementById('devKpis').innerHTML = `
     <div class="stats-row" style="margin-bottom:16px">
-      ${[{l:'Sessions',v:fmtFull(d.sessions),s:d.activeDays+' active days'},{l:'Queries',v:fmtFull(d.queries),s:d.avgQueriesPerSession+' per session'},{l:'Total Tokens',v:fmt(d.totalTokens),s:fmt(d.avgTokensPerQuery)+' per query'},{l:'Cost',v:fmtCost(d.cost),s:fmtCost(d.cost/Math.max(1,d.sessions))+' per session'}].map(c=>`<div class="stat-card"><div class="stat-label">${c.l}</div><div class="stat-value">${c.v}</div><div class="stat-sub">${c.s}</div></div>`).join('')}
+      ${[{l:'Sessions',v:fmtFull(d.sessions),s:d.activeDays+' active days'},{l:'Prompts',v:fmtFull(d.prompts||d.queries),s:(d.avgPromptsPerSession||d.avgQueriesPerSession)+' per session'},{l:'Total Tokens',v:fmt(d.totalTokens),s:fmt(d.avgTokensPerQuery)+' per query'},{l:'Cost',v:fmtCost(d.cost),s:fmtCost(d.cost/Math.max(1,d.sessions))+' per session'}].map(c=>`<div class="stat-card"><div class="stat-label">${c.l}</div><div class="stat-value">${c.v}</div><div class="stat-sub">${c.s}</div></div>`).join('')}
     </div>
     <div class="stats-row" style="grid-template-columns:repeat(6,1fr)">
       <div class="stat-card"><div class="stat-label">Session Depth</div><div class="stat-value">${d.avgSessionDepth}</div><div class="stat-sub">queries per session</div></div>
@@ -835,7 +835,7 @@ async function renderDevView(app) {
   document.getElementById('devCharts').innerHTML = `
     <div class="chart-card"><h3>Daily Activity</h3><canvas id="devDailyChart"></canvas>
       <div class="legend">
-        <div class="legend-item"><div class="legend-dot" style="background:var(--indigo)"></div>Queries</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--indigo)"></div>Prompts</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div>Cost ($)</div>
       </div>
     </div>
@@ -1025,7 +1025,7 @@ function renderStackedBarChart(id, daily) {
   destroyChart(id);
 
   const labels = daily.map(d => formatDate(d.date));
-  const queryVals = daily.map(d => d.queries || 0);
+  const queryVals = daily.map(d => d.prompts || d.queries || 0);
   const costVals = daily.map(d => d.cost || 0);
   const tokenVals = daily.map(d => d.tokens || 0);
 
@@ -1035,7 +1035,7 @@ function renderStackedBarChart(id, daily) {
       labels,
       datasets: [
         {
-          label: 'Queries',
+          label: 'Prompts',
           data: queryVals,
           backgroundColor: '#6366F1',
           borderRadius: 3,
@@ -1074,7 +1074,7 @@ function renderStackedBarChart(id, daily) {
             title: (items) => daily[items[0].dataIndex].date,
             label: (item) => {
               const i = item.dataIndex;
-              if (item.datasetIndex === 0) return `Queries: ${queryVals[i]}, Tokens: ${fmt(tokenVals[i])}`;
+              if (item.datasetIndex === 0) return `Prompts: ${queryVals[i]}, Tokens: ${fmt(tokenVals[i])}`;
               return `Cost: ${fmtCost(costVals[i])}`;
             }
           }
@@ -1168,7 +1168,7 @@ function renderHeatmap(canvasId, dailyData, isTeam) {
 
   const dayMap = {};
   for (const d of dailyData) {
-    if (d.date) dayMap[d.date] = (dayMap[d.date] || 0) + (d.queries || 0);
+    if (d.date) dayMap[d.date] = (dayMap[d.date] || 0) + (d.prompts || d.queries || 0);
   }
 
   const today = new Date();
@@ -1255,7 +1255,7 @@ function renderHeatmap(canvasId, dailyData, isTeam) {
       const sessions = dailyData.find(d => d.date === found.dateStr);
       const sessCount = sessions ? (sessions.sessions || 0) : 0;
       const cost = sessions ? (sessions.cost || 0) : 0;
-      tooltip.innerHTML = `${dayName} &mdash; ${found.val} queries, ${sessCount} sessions, ${fmtCost(cost)}`;
+      tooltip.innerHTML = `${dayName} &mdash; ${found.val} prompts, ${sessCount} sessions, ${fmtCost(cost)}`;
       tooltip.style.display = 'block';
       tooltip.style.left = (e.clientX + 12) + 'px';
       tooltip.style.top = (e.clientY - 10) + 'px';

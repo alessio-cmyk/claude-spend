@@ -63,6 +63,7 @@ async function parseJSONLFile(filePath) {
 function extractSessionData(entries) {
   const queries = [];
   let pendingUserMessage = null;
+  let lastConsumedMessage = null;
 
   function getUserText(content) {
     if (typeof content === 'string') return content;
@@ -84,6 +85,9 @@ function extractSessionData(entries) {
         content.startsWith('<local-command') ||
         content.startsWith('<command-name')
       )) continue;
+
+      // Skip tool_result messages — they're system responses, not human prompts
+      if (Array.isArray(content) && content.every(b => b && (b.type === 'tool_result' || b.type === 'image'))) continue;
 
       const textContent = getUserText(content);
       pendingUserMessage = {
@@ -115,10 +119,14 @@ function extractSessionData(entries) {
         }
       }
 
+      const isNewPrompt = pendingUserMessage !== null && pendingUserMessage !== lastConsumedMessage;
+      if (isNewPrompt) lastConsumedMessage = pendingUserMessage;
+
       queries.push({
         userPrompt: pendingUserMessage?.text || null,
         userTimestamp: pendingUserMessage?.timestamp || null,
         assistantTimestamp: entry.timestamp,
+        isNewPrompt,
         model,
         inputTokens,
         cacheCreationTokens,
@@ -268,6 +276,7 @@ async function parseAllSessions() {
         firstPrompt: firstPrompt.substring(0, 200),
         model: primaryModel,
         queryCount: queries.length,
+        promptCount: queries.filter(q => q.isNewPrompt).length,
         queries,
         inputTokens,
         outputTokens,

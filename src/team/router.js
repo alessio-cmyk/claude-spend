@@ -187,6 +187,7 @@ function createTeamRouter() {
           totalCost: t.totalCost || 0,
           totalSessions: t.totalSessions || d.sessionCount || 0,
           totalQueries: t.totalQueries || 0,
+          totalPrompts: t.totalPrompts || 0,
           totalInputTokens: t.totalInputTokens || 0,
           totalOutputTokens: t.totalOutputTokens || 0,
           totalCacheReadTokens: t.totalCacheReadTokens || 0,
@@ -199,6 +200,7 @@ function createTeamRouter() {
         totalCost: leaderboard.reduce((s, d) => s + d.totalCost, 0),
         totalSessions: leaderboard.reduce((s, d) => s + d.totalSessions, 0),
         totalQueries: leaderboard.reduce((s, d) => s + d.totalQueries, 0),
+        totalPrompts: leaderboard.reduce((s, d) => s + (d.totalPrompts || 0), 0),
       };
 
       res.json({ leaderboard, teamTotals });

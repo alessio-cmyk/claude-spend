@@ -523,7 +523,7 @@ function renderPerf() {
       <div class="kpi-card">
         <div class="kpi-label">Avg Session Depth</div>
         <div class="kpi-value">${avgDepth.toFixed(1)}</div>
-        <div class="kpi-sub">queries per session</div>
+        <div class="kpi-sub">prompts per session</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Avg Tool Activation</div>
@@ -574,7 +574,7 @@ function renderPerf() {
         <th style="width:42px">Grade</th>
         ${sortTh('Health', 'healthScore', true)}
         ${sortTh('Sessions', 'sessions', true)}
-        ${sortTh('Queries', 'queries', true)}
+        ${sortTh('Prompts', 'prompts', true)}
         ${sortTh('Depth', 'avgQueriesPerSession', true)}
         ${sortTh('Tool Use', 'toolActivationRate', true)}
         ${sortTh('Cache', 'cacheHitRate', true)}
@@ -593,7 +593,7 @@ function renderPerf() {
           <td><span class="grade ${g.cls}">${g.letter}</span></td>
           <td class="num" style="font-weight:700">${Math.round(d.healthScore)}</td>
           <td class="num">${fmtFull(d.sessions)}</td>
-          <td class="num">${fmtFull(d.queries)}</td>
+          <td class="num">${fmtFull(d.prompts||d.queries)}</td>
           <td class="num">${d.avgQueriesPerSession}</td>
           <td class="num">${d.toolActivationRate}%</td>
           <td class="num">${fmtPct(d.cacheHitRate)}</td>
@@ -708,14 +708,14 @@ function renderDevDetail(d, allDevs) {
           <div class="detail-metric-sub">${d.activeDays} active days</div>
         </div>
         <div class="detail-metric">
-          <div class="detail-metric-label">Total Queries</div>
-          <div class="detail-metric-value">${fmtFull(d.queries)}</div>
-          <div class="detail-metric-sub">${d.avgQueriesPerSession} avg per session</div>
+          <div class="detail-metric-label">Total Prompts</div>
+          <div class="detail-metric-value">${fmtFull(d.prompts||d.queries)}</div>
+          <div class="detail-metric-sub">${d.avgPromptsPerSession||d.avgQueriesPerSession} avg per session</div>
         </div>
         <div class="detail-metric">
           <div class="detail-metric-label">Total Cost</div>
           <div class="detail-metric-value">${fmtCost(d.cost)}</div>
-          <div class="detail-metric-sub">${d.queries > 0 ? '$' + (d.cost / d.queries).toFixed(3) + '/query' : '-'}</div>
+          <div class="detail-metric-sub">${(d.prompts||d.queries) > 0 ? '$' + (d.cost / (d.prompts||d.queries)).toFixed(3) + '/prompt' : '-'}</div>
         </div>
         <div class="detail-metric">
           <div class="detail-metric-label">Tokens Used</div>
@@ -954,12 +954,12 @@ function exportPerfCSV() {
   computeAllHealth(devs);
   devs.sort((a, b) => b.healthScore - a.healthScore);
 
-  const headers = ['Developer','Grade','Health Score','Sessions','Queries','Avg Depth','Tool Activation %','Cache Hit %','Unique Tools','Active Days','Streak','Trend %','Cost ($)','Tokens','Top Project'];
+  const headers = ['Developer','Grade','Health Score','Sessions','Prompts','Avg Depth','Tool Activation %','Cache Hit %','Unique Tools','Active Days','Streak','Trend %','Cost ($)','Tokens','Top Project'];
   const rows = devs.map(d => {
     const topProj = Object.entries(d.projectUsage || {}).sort((a, b) => b[1].tokens - a[1].tokens)[0];
     return csvRow([
-      d.devId, d.gradeInfo.letter, Math.round(d.healthScore), d.sessions, d.queries,
-      d.avgQueriesPerSession, d.toolActivationRate, d.cacheHitRate.toFixed(1),
+      d.devId, d.gradeInfo.letter, Math.round(d.healthScore), d.sessions, d.prompts||d.queries,
+      d.avgPromptsPerSession||d.avgQueriesPerSession, d.toolActivationRate, d.cacheHitRate.toFixed(1),
       d.uniqueTools, d.activeDays, d.streak, d.trend, d.cost.toFixed(2), d.totalTokens,
       topProj ? topProj[0].split(/[-/]/).pop() : ''
     ]);
