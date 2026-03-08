@@ -378,9 +378,17 @@ async function loadData() {
     app.style.opacity = '1';
     app.style.pointerEvents = '';
     render();
-    // Fetch prompt quality scores async (Gemini call, may be slow) — re-render when ready
+    // Fetch prompt quality scores async (Gemini call, may be slow) — update in-place
     fetch('/api/team/prompt-quality' + q).then(r => r.json()).then(d => {
-      if (d.scores) { PROMPT_QUALITY = d.scores; render(); }
+      if (d.scores) {
+        PROMPT_QUALITY = d.scores;
+        // Update prompt quality cells in-place without full re-render
+        document.querySelectorAll('[data-pq-dev]').forEach(el => {
+          const devId = el.getAttribute('data-pq-dev');
+          const pq = PROMPT_QUALITY[devId];
+          if (pq) el.textContent = pq.rating || '—';
+        });
+      }
     }).catch(() => {});
   } catch (e) {
     app.style.opacity = '1';
