@@ -469,7 +469,7 @@ function generateNotes(d, roi, health) {
   if (d.streak >= 10) notes.push({ type: 'positive', text: `${d.streak}-day active streak — consistent daily AI integration into workflow.` });
   if (d.cacheHitRate >= 30) notes.push({ type: 'positive', text: `High cache hit rate (${fmtPct(d.cacheHitRate)}) — efficient context reuse reducing costs.` });
   if (d.toolActivationRate >= 80) notes.push({ type: 'positive', text: `High tool activation (${d.toolActivationRate}%) — using AI for code edits, not just Q&A.` });
-  if (d.avgQueriesPerSession >= 8) notes.push({ type: 'positive', text: `Deep session engagement (${d.avgQueriesPerSession} queries/session) — sustained multi-turn workflows.` });
+  if (d.avgQueriesPerSession >= 8) notes.push({ type: 'positive', text: `Deep session engagement (${d.avgQueriesPerSession} prompts/session) — sustained multi-turn workflows.` });
   if (d.uniqueTools >= 8) notes.push({ type: 'positive', text: `Broad tool adoption (${d.uniqueTools} unique tools) — leveraging full AI capability.` });
 
   // Neutral / areas to watch
@@ -481,7 +481,7 @@ function generateNotes(d, roi, health) {
   // Areas for improvement
   if (health < 40 && d.sessions > 0) notes.push({ type: 'negative', text: `Low health score (${Math.round(health)}/100) — opportunity to improve AI workflow effectiveness.` });
   if (d.sessions > 0 && d.toolActivationRate < 30) notes.push({ type: 'negative', text: `Low tool activation (${d.toolActivationRate}%) — primarily using AI for conversation, not code actions.` });
-  if (d.sessions > 0 && d.avgQueriesPerSession < 3) notes.push({ type: 'negative', text: `Shallow sessions (${d.avgQueriesPerSession} queries avg) — may indicate abandoning conversations early.` });
+  if (d.sessions > 0 && d.avgQueriesPerSession < 3) notes.push({ type: 'negative', text: `Shallow sessions (${d.avgQueriesPerSession} prompts avg) — may indicate abandoning conversations early.` });
   if (d.sessions > 0 && d.cacheHitRate < 5) notes.push({ type: 'negative', text: `Very low cache rate (${fmtPct(d.cacheHitRate)}) — not leveraging context reuse. Consider longer sessions.` });
   if (d.activeDays < 3 && d.sessions > 0) notes.push({ type: 'negative', text: `Only ${d.activeDays} active days — sporadic usage. Encourage daily integration.` });
   if (d.sessions === 0) notes.push({ type: 'negative', text: `No recorded sessions in this period — not using Claude Code.` });
@@ -643,7 +643,7 @@ function renderDevDetail(d, allDevs) {
   const modelEntries = Object.entries(d.modelUsage || {}).sort((a, b) => b[1].tokens - a[1].tokens);
 
   const SIGNAL_TIPS = {
-    'Query Depth': { low: 'Go deeper in sessions — iterate on the problem instead of starting new chats', high: 'Great session depth — sustained multi-turn problem solving' },
+    'Prompt Depth': { low: 'Go deeper in sessions — iterate on the problem instead of starting new chats', high: 'Great session depth — sustained multi-turn problem solving' },
     'Tool Activation': { low: 'Let Claude edit files and run commands, not just answer questions', high: 'Strong tool usage — using AI for real code actions' },
     'Prompt Quality': { low: 'Write specific prompts: include file paths, expected behavior, and clear action verbs', high: 'Clear, specific prompts — setting AI up for success' },
     'Consistency': { low: 'Use AI daily — make it part of your routine, not a once-in-a-while tool', high: 'Consistent daily usage — AI is embedded in the workflow' },
@@ -677,7 +677,7 @@ function renderDevDetail(d, allDevs) {
   let wowHtml = '';
   if (wow) {
     const items = [
-      { l: 'Queries', curr: wow.queries.current, prev: wow.queries.previous, pct: wow.queries.pct },
+      { l: 'Prompts', curr: wow.queries.current, prev: wow.queries.previous, pct: wow.queries.pct },
       { l: 'Sessions', curr: wow.sessions.current, prev: wow.sessions.previous, pct: wow.sessions.pct },
       { l: 'Cost', curr: '$' + wow.cost.current, prev: '$' + wow.cost.previous, pct: wow.cost.pct },
     ];
@@ -736,7 +736,7 @@ function renderDevDetail(d, allDevs) {
 
       <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);margin-bottom:10px">ROI Signals</h4>
       <div class="signal-grid">
-        ${signalBar('Query Depth', roi.queryDepth)}
+        ${signalBar('Prompt Depth', roi.queryDepth)}
         ${signalBar('Tool Activation', roi.toolActivation)}
         ${signalBar('Prompt Quality', roi.promptQuality)}
         ${signalBar('Consistency', roi.consistency)}

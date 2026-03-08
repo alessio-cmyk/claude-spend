@@ -46,8 +46,8 @@ async function saveDeveloper(devId, data, timezone) {
       const prev = existingMap.get(s.sessionId);
       if (!prev) {
         rawNewSessions.push(s);
-      } else if (s.queryCount > (prev.queryCount || 0)) {
-        // Session grew — update it
+      } else if (s.queryCount > (prev.queryCount || 0) || (!prev.promptCount && s.queries)) {
+        // Session grew or needs recompact (e.g. missing promptCount)
         updatedSessions.push(s);
         existingMap.set(s.sessionId, compactSession(s));
       }

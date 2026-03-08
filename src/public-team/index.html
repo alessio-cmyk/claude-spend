@@ -557,7 +557,7 @@ function renderLeaderboard() {
     const ts = ws.teamSummary;
     const weekLabel = formatDate(ws.weekStart) + '–' + formatDate(ws.weekEnd);
     const dir = ts.queriesPct > 0 ? 'up' : ts.queriesPct < 0 ? 'down' : 'flat';
-    wowBannerHtml = `<div class="wow-banner animate delay-2">Week of ${weekLabel} · Team queries ${dir} ${Math.abs(ts.queriesPct)}% vs last week · ${ts.devsMoreActive} of ${ts.totalDevs} devs more active</div>`;
+    wowBannerHtml = `<div class="wow-banner animate delay-2">Week of ${weekLabel} · Team prompts ${dir} ${Math.abs(ts.queriesPct)}% vs last week · ${ts.devsMoreActive} of ${ts.totalDevs} devs more active</div>`;
   }
 
   /* === FEATURE 4b: Build inactivity map for recency dots === */
@@ -591,7 +591,7 @@ function renderLeaderboard() {
         let wowCell = '<span class="wow-stable">— stable</span>';
         let wowTooltip = '';
         if (wow) {
-          wowTooltip = 'Queries: ' + wow.queries.current + ' this week vs ' + wow.queries.previous + ' last week (' + (wow.queries.delta>=0?'+':'') + wow.queries.delta + ' / ' + (wowPct>=0?'+':'') + wowPct + '%)';
+          wowTooltip = 'Prompts: ' + wow.queries.current + ' this week vs ' + wow.queries.previous + ' last week (' + (wow.queries.delta>=0?'+':'') + wow.queries.delta + ' / ' + (wowPct>=0?'+':'') + wowPct + '%)';
           if (wowPct >= 10) wowCell = '<span class="wow-up">&#9650; +' + Math.abs(wowPct) + '%</span>';
           else if (wowPct <= -10) wowCell = '<span class="wow-down">&#9660; -' + Math.abs(wowPct) + '%</span>';
         }
@@ -819,10 +819,10 @@ async function renderDevView(app) {
   // KPIs - 2 rows
   document.getElementById('devKpis').innerHTML = `
     <div class="stats-row" style="margin-bottom:16px">
-      ${[{l:'Sessions',v:fmtFull(d.sessions),s:d.activeDays+' active days'},{l:'Prompts',v:fmtFull(d.prompts||d.queries),s:(d.avgPromptsPerSession||d.avgQueriesPerSession)+' per session'},{l:'Total Tokens',v:fmt(d.totalTokens),s:fmt(d.avgTokensPerQuery)+' per query'},{l:'Cost',v:fmtCost(d.cost),s:fmtCost(d.cost/Math.max(1,d.sessions))+' per session'}].map(c=>`<div class="stat-card"><div class="stat-label">${c.l}</div><div class="stat-value">${c.v}</div><div class="stat-sub">${c.s}</div></div>`).join('')}
+      ${[{l:'Sessions',v:fmtFull(d.sessions),s:d.activeDays+' active days'},{l:'Prompts',v:fmtFull(d.prompts||d.queries),s:(d.avgPromptsPerSession||d.avgQueriesPerSession)+' per session'},{l:'Total Tokens',v:fmt(d.totalTokens),s:fmt(d.avgTokensPerQuery)+' per prompt'},{l:'Cost',v:fmtCost(d.cost),s:fmtCost(d.cost/Math.max(1,d.sessions))+' per session'}].map(c=>`<div class="stat-card"><div class="stat-label">${c.l}</div><div class="stat-value">${c.v}</div><div class="stat-sub">${c.s}</div></div>`).join('')}
     </div>
     <div class="stats-row" style="grid-template-columns:repeat(6,1fr)">
-      <div class="stat-card"><div class="stat-label">Session Depth</div><div class="stat-value">${d.avgSessionDepth}</div><div class="stat-sub">queries per session</div></div>
+      <div class="stat-card"><div class="stat-label">Session Depth</div><div class="stat-value">${d.avgSessionDepth}</div><div class="stat-sub">prompts per session</div></div>
       <div class="stat-card"><div class="stat-label">Tool Activation</div><div class="stat-value">${d.toolActivationRate}%</div><div class="stat-sub">${d.uniqueTools} unique tools</div></div>
       <div class="stat-card"><div class="stat-label">Cache Hit Rate</div><div class="stat-value">${fmtPct(d.cacheHitRate)}</div><div class="stat-sub">${fmt(d.cacheReadTokens)} cached</div></div>
       <div class="stat-card"><div class="stat-label">Streak</div><div class="stat-value">${d.streak}d</div><div class="stat-sub">${trendBadge(d.trend)}</div></div>
@@ -849,7 +849,7 @@ async function renderDevView(app) {
   /* === FEATURE 2: Individual Radar Chart === */
   const roi = computeROIRadar(d, PROD_DATA.developers.filter(x => x.sessions > 0));
   const ROI_TIPS = {
-    'Query Depth': 'Go deeper in sessions — iterate on the problem instead of starting new chats',
+    'Prompt Depth': 'Go deeper in sessions — iterate on the problem instead of starting new chats',
     'Tool Activation': 'Let Claude edit files and run commands, not just answer questions',
     'Prompt Quality': (PROMPT_QUALITY[d.devId] && PROMPT_QUALITY[d.devId].feedback) || 'Write specific prompts: include file paths, expected behavior, and action verbs',
     'Consistency': 'Use AI daily — make it part of your routine, not a once-in-a-while tool',
@@ -880,8 +880,8 @@ async function renderDevView(app) {
   let bottomHtml = '';
   if (projEntries.length) {
     const half = Math.ceil(Math.min(projEntries.length, 20) / 2);
-    const projRow = (p,v) => `<tr style="cursor:default"><td style="padding:8px 8px 8px 0;border-bottom:1px solid var(--border)"><span class="proj-name">${esc(projShort(p))}</span></td><td style="padding:8px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);white-space:nowrap">${fmtFull(v.sessions)}</td><td style="padding:8px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);white-space:nowrap">${fmtFull(v.queries)}</td><td style="padding:8px 0 8px 8px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);white-space:nowrap">${fmtCost(v.cost)}</td></tr>`;
-    const projHead = `<thead><tr><th style="padding:8px 8px 8px 0;border-bottom:1px solid var(--border);text-align:left">Project</th><th style="text-align:right;padding:8px;border-bottom:1px solid var(--border);white-space:nowrap">Sessions</th><th style="text-align:right;padding:8px;border-bottom:1px solid var(--border);white-space:nowrap">Queries</th><th style="text-align:right;padding:8px 0 8px 8px;border-bottom:1px solid var(--border);white-space:nowrap">Cost</th></tr></thead>`;
+    const projRow = (p,v) => `<tr style="cursor:default"><td style="padding:8px 8px 8px 0;border-bottom:1px solid var(--border)"><span class="proj-name">${esc(projShort(p))}</span></td><td style="padding:8px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);white-space:nowrap">${fmtFull(v.sessions)}</td><td style="padding:8px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);white-space:nowrap">${fmtFull(v.prompts||v.queries)}</td><td style="padding:8px 0 8px 8px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);white-space:nowrap">${fmtCost(v.cost)}</td></tr>`;
+    const projHead = `<thead><tr><th style="padding:8px 8px 8px 0;border-bottom:1px solid var(--border);text-align:left">Project</th><th style="text-align:right;padding:8px;border-bottom:1px solid var(--border);white-space:nowrap">Sessions</th><th style="text-align:right;padding:8px;border-bottom:1px solid var(--border);white-space:nowrap">Prompts</th><th style="text-align:right;padding:8px 0 8px 8px;border-bottom:1px solid var(--border);white-space:nowrap">Cost</th></tr></thead>`;
     bottomHtml += `<div class="chart-card" style="grid-column:1/-1"><h3>Projects</h3>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 32px">
         <table style="width:100%;border-collapse:collapse;font-size:12px">${projHead}<tbody>${projEntries.slice(0,half).map(([p,v]) => projRow(p,v)).join('')}</tbody></table>
@@ -968,7 +968,7 @@ function computeHealth(d) {
 
 /* === FEATURE 2: ROI Radar computations === */
 function computeROIRadar(d, allDevs) {
-  // 1. Query Depth: avg queries/session, normalise 0-20+ -> 0-100
+  // 1. Prompt Depth: avg queries/session, normalise 0-20+ -> 0-100
   const queryDepth = Math.min(100, (d.avgQueriesPerSession / 20) * 100);
 
   // 2. Tool Activation Rate: % sessions with >= 1 tool call
@@ -1007,7 +1007,7 @@ function computeROIRadar(d, allDevs) {
   const changeVerification = d.changeVerificationRate || 0;
 
   return [
-    { label: 'Query Depth', score: queryDepth, raw: d.avgQueriesPerSession },
+    { label: 'Prompt Depth', score: queryDepth, raw: d.avgQueriesPerSession },
     { label: 'Tool Activation', score: toolActivation, raw: d.toolActivationRate + '%' },
     { label: 'Prompt Quality', score: promptQuality !== null ? promptQuality : 50, raw: pq ? pq.rating : 'loading...' },
     { label: 'Consistency', score: Math.min(100, sessionConsistency), raw: sessionConsistency.toFixed(0) + '%' },
