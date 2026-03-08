@@ -40,6 +40,8 @@ function getProductivityAnalytics(fromDate, toDate) {
         // Use per-query daily breakdown for accurate attribution
         const sessionDays = new Set();
         for (const [day, stats] of Object.entries(s._dailyBreakdown)) {
+          if (fromDate && day < fromDate) continue;
+          if (toDate && day > toDate) continue;
           if (!dailyMap[day]) dailyMap[day] = { date: day, tokens: 0, cost: 0, sessions: 0, queries: 0, outputTokens: 0, inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
           dailyMap[day].tokens += stats.tokens || 0;
           dailyMap[day].cost += stats.cost || 0;

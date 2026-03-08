@@ -61,9 +61,10 @@ async function downloadAll() {
       ContinuationToken: continuationToken,
     }));
 
-    for (const obj of (res.Contents || [])) {
+    const objects = (res.Contents || []).filter(obj => obj.Key.slice(prefix.length));
+    await Promise.all(objects.map(async (obj) => {
       const rel = obj.Key.slice(prefix.length);
-      if (!rel) continue;
+      if (!rel) return;
       const localPath = path.join(dataDir, rel);
       fs.mkdirSync(path.dirname(localPath), { recursive: true });
 
@@ -75,7 +76,7 @@ async function downloadAll() {
       for await (const chunk of getRes.Body) chunks.push(chunk);
       fs.writeFileSync(localPath, Buffer.concat(chunks));
       count++;
-    }
+    }));
 
     continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
   } while (continuationToken);
