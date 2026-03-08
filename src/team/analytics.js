@@ -32,16 +32,13 @@ function getProductivityAnalytics(fromDate, toDate) {
 
     const totals = computeTotals(sessions);
 
-    // Daily breakdown — use per-query daily breakdown if available
+    // Daily breakdown — from (already-sliced) session data
     const dailyMap = {};
     for (const s of sessions) {
       if (!s.date || s.date === 'unknown') continue;
       if (s._dailyBreakdown) {
-        // Use per-query daily breakdown for accurate attribution
         const sessionDays = new Set();
         for (const [day, stats] of Object.entries(s._dailyBreakdown)) {
-          if (fromDate && day < fromDate) continue;
-          if (toDate && day > toDate) continue;
           if (!dailyMap[day]) dailyMap[day] = { date: day, tokens: 0, cost: 0, sessions: 0, queries: 0, outputTokens: 0, inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
           dailyMap[day].tokens += stats.tokens || 0;
           dailyMap[day].cost += stats.cost || 0;
@@ -59,7 +56,6 @@ function getProductivityAnalytics(fromDate, toDate) {
           teamDaily[d].sessions += 1;
         }
       } else {
-        // Fallback: attribute all to session start date
         if (!dailyMap[s.date]) dailyMap[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0, outputTokens: 0, inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
         dailyMap[s.date].tokens += s.totalTokens || 0;
         dailyMap[s.date].cost += s.cost || 0;
@@ -138,7 +134,7 @@ function getProductivityAnalytics(fromDate, toDate) {
       }
     }
 
-    // Project usage
+    // Project usage — sessions are already sliced, just use their fields
     const projectUsage = {};
     for (const s of sessions) {
       const proj = s.project || 'unknown';
@@ -156,11 +152,10 @@ function getProductivityAnalytics(fromDate, toDate) {
       teamProjects[proj].devs.add(dev.devId);
     }
 
-    // Session depth distribution
-    const depths = sessions.map(s => s.queryCount || 0);
-    const avgSessionDepth = depths.reduce((a, b) => a + b, 0) / depths.length;
+    // Session depth
+    const avgSessionDepth = sessions.length > 0 ? totals.totalQueries / sessions.length : 0;
 
-    // Output ratio + cache hit rate
+    // Output ratio + cache hit rate — from totals (filtered when applicable)
     const billableIO = (totals.totalInputTokens || 0) + (totals.totalOutputTokens || 0);
     const outputRatio = billableIO > 0 ? totals.totalOutputTokens / billableIO : 0;
     const totalInput = (totals.totalInputTokens || 0) + (totals.totalCacheReadTokens || 0) + (totals.totalCacheCreationTokens || 0);
@@ -211,10 +206,10 @@ function getProductivityAnalytics(fromDate, toDate) {
       sessions: sessions.length,
       queries: totals.totalQueries,
       totalTokens: totals.totalTokens,
-      inputTokens: totals.totalInputTokens,
-      outputTokens: totals.totalOutputTokens,
-      cacheReadTokens: totals.totalCacheReadTokens,
-      cacheCreationTokens: totals.totalCacheCreationTokens,
+      inputTokens: totals.totalInputTokens || 0,
+      outputTokens: totals.totalOutputTokens || 0,
+      cacheReadTokens: totals.totalCacheReadTokens || 0,
+      cacheCreationTokens: totals.totalCacheCreationTokens || 0,
       cost: totals.totalCost,
       avgTokensPerQuery: totals.totalQueries > 0 ? Math.round(totals.totalTokens / totals.totalQueries) : 0,
       avgQueriesPerSession: sessions.length > 0 ? Math.round(totals.totalQueries / sessions.length) : 0,

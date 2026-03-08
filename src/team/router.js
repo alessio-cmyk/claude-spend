@@ -454,6 +454,42 @@ function createTeamRouter() {
     try { return JSON.parse(fs.readFileSync(TAGS_PATH, 'utf-8')); } catch { return {}; }
   }
 
+  // GET /api/team/admin/archive-health - Check archive integrity for all devs
+  router.get('/admin/archive-health', (req, res) => {
+    if (!checkAdmin(req, res)) return;
+    const DATA_DIR = process.env.CLAUDE_SPEND_DATA || path.join(process.cwd(), 'data', 'team');
+    const archiveDir = path.join(DATA_DIR, 'archive');
+    const devs = listDevelopers();
+    const results = devs.map(d => {
+      const archivePath = path.join(archiveDir, d.devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_') + '.jsonl');
+      const totalQueryCount = (d.totals && d.totals.totalQueries) || 0;
+      if (!fs.existsSync(archivePath)) {
+        return { devId: d.devId, status: 'missing', archivedQueries: 0, expectedQueries: totalQueryCount };
+      }
+      try {
+        const lines = fs.readFileSync(archivePath, 'utf-8').trim().split('\n').filter(Boolean);
+        let archivedQueries = 0;
+        for (const line of lines) {
+          try { archivedQueries += (JSON.parse(line).queries || []).length; } catch {}
+        }
+        const avgPerEntry = lines.length > 0 ? archivedQueries / lines.length : 0;
+        const healthy = lines.length === 0 || avgPerEntry > 2;
+        return {
+          devId: d.devId,
+          status: healthy ? 'ok' : 'corrupted',
+          archiveEntries: lines.length,
+          archivedQueries,
+          expectedQueries: totalQueryCount,
+          coverage: totalQueryCount > 0 ? Math.round(archivedQueries / totalQueryCount * 100) + '%' : 'n/a',
+        };
+      } catch {
+        return { devId: d.devId, status: 'error', archivedQueries: 0, expectedQueries: totalQueryCount };
+      }
+    });
+    const corrupted = results.filter(r => r.status !== 'ok').length;
+    res.json({ corrupted, total: results.length, devs: results });
+  });
+
   // GET /api/team/project-tags
   router.get('/project-tags', (req, res) => {
     res.json(loadProjectTags());

@@ -53,14 +53,57 @@ async function saveDeveloper(devId, data, timezone) {
       }
     }
 
-    // Archive full sessions with queries[] before compacting
-    const toArchive = [...rawNewSessions, ...updatedSessions];
-    if (toArchive.length > 0) {
-      const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-      const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
-      const lines = toArchive.map(s => JSON.stringify(s)).join('\n') + '\n';
-      fs.appendFileSync(archivePath, lines);
-      uploadFile(archivePath);
+    // Archive queries before compacting
+    const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
+
+    // Check if archive needs full rebuild (corrupted by bad dedup)
+    let needsFullRebuild = false;
+    try {
+      if (fs.existsSync(archivePath)) {
+        const archiveLines = fs.readFileSync(archivePath, 'utf-8').trim().split('\n').filter(Boolean);
+        const archivedQueries = archiveLines.reduce((sum, l) => {
+          try { return sum + (JSON.parse(l).queries || []).length; } catch { return sum; }
+        }, 0);
+        // Corrupted if avg queries/entry ≤ 2 (healthy archives have dozens+)
+        const avgPerEntry = archiveLines.length > 0 ? archivedQueries / archiveLines.length : 0;
+        needsFullRebuild = archiveLines.length > 0 && avgPerEntry <= 2;
+      }
+    } catch {}
+
+    const toArchive = [];
+    if (needsFullRebuild) {
+      // Full rebuild: archive ALL incoming sessions with queries
+      for (const s of (data.sessions || [])) {
+        if (s.queries && s.queries.length > 0) toArchive.push(s);
+      }
+      if (toArchive.length > 0) {
+        // Overwrite corrupted archive
+        const lines = toArchive.map(s => JSON.stringify(s)).join('\n') + '\n';
+        fs.writeFileSync(archivePath, lines);
+        uploadFile(archivePath);
+        console.log(`[archive] Rebuilt ${safe}.jsonl: ${toArchive.length} sessions`);
+      }
+    } else {
+      // Normal: archive only new queries
+      for (const s of rawNewSessions) {
+        if (s.queries && s.queries.length > 0) toArchive.push(s);
+      }
+      for (const s of updatedSessions) {
+        if (s.queries && s.queries.length > 0) {
+          const prev = existing.sessions.find(p => p.sessionId === s.sessionId);
+          const prevCount = prev ? (prev.queryCount || 0) : 0;
+          const newQueries = s.queries.slice(prevCount);
+          if (newQueries.length > 0) {
+            toArchive.push({ ...s, queries: newQueries });
+          }
+        }
+      }
+      if (toArchive.length > 0) {
+        const lines = toArchive.map(s => JSON.stringify(s)).join('\n') + '\n';
+        fs.appendFileSync(archivePath, lines);
+        uploadFile(archivePath);
+      }
     }
 
     const newSessions = rawNewSessions.map(compactSession);
@@ -95,6 +138,52 @@ function migrateSessionsIfNeeded(data, fp) {
     data.sessions = data.sessions.map(compactSession);
     fs.writeFileSync(fp, JSON.stringify(data));
     uploadFile(fp);
+  }
+}
+
+function dedupArchives() {
+  ensureDir();
+  const files = fs.readdirSync(ARCHIVE_DIR).filter(f => f.endsWith('.jsonl'));
+  for (const file of files) {
+    const archivePath = path.join(ARCHIVE_DIR, file);
+    const lines = fs.readFileSync(archivePath, 'utf-8').trim().split('\n').filter(Boolean);
+    // Group by sessionId, keep all queries deduplicated
+    const sessionQueries = new Map(); // sessionId -> Map<queryIndex, query>
+    const sessionMeta = new Map();    // sessionId -> latest session metadata
+    for (const line of lines) {
+      const s = JSON.parse(line);
+      const sid = s.sessionId;
+      if (!sessionQueries.has(sid)) sessionQueries.set(sid, { map: new Map(), offset: 0 });
+      const { map: qMap } = sessionQueries.get(sid);
+      let offset = sessionQueries.get(sid).offset;
+      const queries = s.queries || [];
+      for (let i = 0; i < queries.length; i++) {
+        const q = queries[i];
+        const key = (q.userTimestamp || '') + '|' + (q.assistantTimestamp || '');
+        // Use sequential index as tiebreaker only when timestamps are missing
+        const dedupKey = key === '|' ? `__idx_${offset + i}` : key;
+        if (!qMap.has(dedupKey)) qMap.set(dedupKey, q);
+      }
+      sessionQueries.get(sid).offset = offset + queries.length;
+      // Keep latest metadata (most queries = most complete)
+      const prev = sessionMeta.get(sid);
+      if (!prev || (s.queryCount || 0) >= (prev.queryCount || 0)) {
+        const { queries, ...meta } = s;
+        sessionMeta.set(sid, meta);
+      }
+    }
+    // Rebuild: one entry per session with all unique queries
+    const deduped = [];
+    for (const [sid, { map: qMap }] of sessionQueries) {
+      const meta = sessionMeta.get(sid);
+      const queries = [...qMap.values()].sort((a, b) =>
+        (a.userTimestamp || '').localeCompare(b.userTimestamp || ''));
+      deduped.push(JSON.stringify({ ...meta, queries }));
+    }
+    const tmpPath = archivePath + '.tmp.' + process.pid;
+    fs.writeFileSync(tmpPath, deduped.join('\n') + '\n');
+    fs.renameSync(tmpPath, archivePath);
+    console.log(`[archive] Deduped ${file}: ${lines.length} entries → ${deduped.length}`);
   }
 }
 
@@ -241,19 +330,76 @@ function compactSession(s) {
 }
 
 function filterSessions(sessions, from, to) {
-  return sessions.filter(s => {
-    if (!s.date || s.date === 'unknown') return false;
-    // Use daily breakdown if available — include session if any day falls in range
+  if (!from && !to) return sessions;
+
+  return sessions.map(s => {
+    if (!s.date || s.date === 'unknown') return null;
+
     if (s._dailyBreakdown) {
-      const days = Object.keys(s._dailyBreakdown);
-      return days.some(d => (!from || d >= from) && (!to || d <= to));
+      // Slice _dailyBreakdown to only in-range days
+      const sliced = {};
+      for (const [day, stats] of Object.entries(s._dailyBreakdown)) {
+        if (from && day < from) continue;
+        if (to && day > to) continue;
+        sliced[day] = stats;
+      }
+      if (Object.keys(sliced).length === 0) return null;
+
+      // Recompute aggregate fields from sliced days
+      let tokens = 0, cost = 0, queries = 0;
+      for (const stats of Object.values(sliced)) {
+        tokens += stats.tokens || 0;
+        cost += stats.cost || 0;
+        queries += stats.queries || 0;
+      }
+
+      // Proportion ratio for fields not tracked per-day (models, tools, cache tokens)
+      const fullTokens = s.totalTokens || 1;
+      const ratio = tokens / fullTokens;
+
+      return {
+        ...s,
+        totalTokens: tokens,
+        cost,
+        queryCount: queries,
+        inputTokens: Math.round((s.inputTokens || 0) * ratio),
+        outputTokens: Math.round((s.outputTokens || 0) * ratio),
+        cacheReadTokens: Math.round((s.cacheReadTokens || 0) * ratio),
+        cacheCreationTokens: Math.round((s.cacheCreationTokens || 0) * ratio),
+        _dailyBreakdown: sliced,
+        _models: scaleModels(s._models, ratio),
+        _tools: scaleTools(s._tools, ratio),
+      };
     }
-    // Fallback: use session date range (date to lastDate)
+
+    // Fallback: no daily breakdown — include/exclude whole session
     const end = s.lastDate || s.date;
-    if (from && end < from) return false;
-    if (to && s.date > to) return false;
-    return true;
-  });
+    if (from && end < from) return null;
+    if (to && s.date > to) return null;
+    return s;
+  }).filter(Boolean);
+}
+
+function scaleModels(models, ratio) {
+  if (!models || ratio >= 1) return models;
+  const scaled = {};
+  for (const [m, v] of Object.entries(models)) {
+    scaled[m] = {
+      queries: Math.round((v.queries || 0) * ratio),
+      tokens: Math.round((v.tokens || 0) * ratio),
+      cost: Math.round((v.cost || 0) * ratio * 100) / 100,
+    };
+  }
+  return scaled;
+}
+
+function scaleTools(tools, ratio) {
+  if (!tools || ratio >= 1) return tools;
+  const scaled = {};
+  for (const [t, count] of Object.entries(tools)) {
+    scaled[t] = Math.round((count || 0) * ratio);
+  }
+  return scaled;
 }
 
 /* === FEATURE 3a: Health Score History Persistence === */
@@ -326,5 +472,5 @@ function computeTotalsFromDaily(dailyUsage, sessions) {
 module.exports = {
   saveDeveloper, loadDeveloper, listDevelopers, loadAllDevelopers,
   computeTotals, computeTotalsFromDaily, computeDailyUsage, filterSessions,
-  snapshotHealthHistory, loadHealthHistory,
+  snapshotHealthHistory, loadHealthHistory, dedupArchives,
 };
