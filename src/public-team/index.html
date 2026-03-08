@@ -350,7 +350,7 @@ function getDateParams() {
   if (dateRange.preset === 'all') return '';
   let from, to = toISO(new Date());
   if (dateRange.preset === 'custom') { from = dateRange.from; to = dateRange.to || to; }
-  else { const days = {'1d':1,'7d':7,'30d':30,'90d':90}; from = daysAgo(days[dateRange.preset]); }
+  else { const days = {'1d':0,'7d':6,'30d':29,'90d':89}; from = daysAgo(days[dateRange.preset]); }
   return `from=${from}&to=${to}`;
 }
 
