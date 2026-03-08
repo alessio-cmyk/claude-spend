@@ -292,7 +292,7 @@ function fmtFull(n) { return (n || 0).toLocaleString(); }
 function fmtCost(n) { return '$' + (n || 0).toFixed(2); }
 function fmtPct(n) { return (n || 0).toFixed(1) + '%'; }
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-function jsq(s) { return JSON.stringify(String(s)); }
+function jsq(s) { return esc(JSON.stringify(String(s))); }
 function csvCell(v) {
   let s = String(v == null ? '' : v);
   if (/^[=+\-@]/.test(s)) s = "'" + s;

@@ -226,7 +226,7 @@ let AI_CONFIGURED = false;
 const aiReviews = {}; // cache: devId -> review
 
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const jsq = s => JSON.stringify(String(s));
+const jsq = s => esc(JSON.stringify(String(s)));
 const csvCell = (v) => {
   let s = String(v == null ? '' : v);
   if (/^[=+\-@]/.test(s)) s = "'" + s;
