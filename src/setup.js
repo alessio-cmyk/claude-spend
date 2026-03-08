@@ -7,6 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { spawnSync } = require('child_process');
 
 const args = process.argv.slice(2).filter(a => a !== 'setup');
 const keyIdx = args.indexOf('--key');
@@ -15,6 +16,12 @@ const removeFlag = args.includes('--remove');
 
 const DEFAULT_SERVER = 'https://ks5kkwv9ja.us-east-1.awsapprunner.com';
 const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+
+function shellEscapeArg(value) {
+  const s = String(value);
+  if (s.length === 0) return "''";
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
 
 if (removeFlag) {
   // Remove the sync hook
@@ -63,7 +70,16 @@ if (fs.existsSync(settingsPath)) {
 if (!settings.hooks) settings.hooks = {};
 if (!Array.isArray(settings.hooks.Stop)) settings.hooks.Stop = [];
 
-const syncCommand = `npx --yes github:alessio-cmyk/claude-spend --sync --key ${apiKey} --server ${serverUrl}`;
+const syncCommand = [
+  'npx',
+  '--yes',
+  'github:alessio-cmyk/claude-spend',
+  '--sync',
+  '--key',
+  shellEscapeArg(apiKey),
+  '--server',
+  shellEscapeArg(serverUrl),
+].join(' ');
 
 // Check if already installed
 const existingIdx = settings.hooks.Stop.findIndex(h =>
@@ -98,14 +114,22 @@ console.log(`\n  Your Claude Code sessions will now auto-sync when conversations
 
 // Run first sync immediately
 console.log('\n  Running first sync...\n');
-const { execSync } = require('child_process');
 try {
-  const out = execSync(
-    `node ${JSON.stringify(path.join(__dirname, 'index.js'))} --sync --key ${apiKey} --server ${serverUrl}`,
-    { encoding: 'utf-8', timeout: 120000 }
-  );
-  process.stdout.write(out);
+  const run = spawnSync(process.execPath, [
+    path.join(__dirname, 'index.js'),
+    '--sync',
+    '--key',
+    apiKey,
+    '--server',
+    serverUrl,
+  ], { encoding: 'utf-8', timeout: 120000 });
+
+  if (run.stdout) process.stdout.write(run.stdout);
+  if (run.status !== 0) {
+    const msg = (run.stderr || run.stdout || `exit code ${run.status}`).trim();
+    throw new Error(msg);
+  }
 } catch (err) {
-  const msg = err.stdout || err.stderr || err.message;
+  const msg = err.message;
   console.log(`  First sync failed: ${msg.trim()}\n  You can retry manually or it will sync after your next Claude conversation.\n`);
 }

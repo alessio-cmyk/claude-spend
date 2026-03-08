@@ -226,6 +226,14 @@ let AI_CONFIGURED = false;
 const aiReviews = {}; // cache: devId -> review
 
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const jsq = s => JSON.stringify(String(s));
+const csvCell = (v) => {
+  let s = String(v == null ? '' : v);
+  if (/^[=+\-@]/.test(s)) s = "'" + s;
+  s = s.replace(/"/g, '""');
+  return `"${s}"`;
+};
+const csvRow = (arr) => arr.map(csvCell).join(',');
 
 function headers() {
   return { 'Authorization': 'Bearer ' + adminPass, 'Content-Type': 'application/json' };
@@ -296,9 +304,9 @@ async function loadKeys() {
       <td style="color:var(--text-secondary);font-size:12px" title="${u.timezone ? esc(u.timezone) : 'Not yet detected — will auto-detect on next sync'}">${u.timezone ? esc(u.timezone.split('/').pop().replace(/_/g, ' ')) : '<span style="color:var(--text-tertiary)">—</span>'}</td>
       <td class="key-cell"><span class="key-hidden" title="Hover to reveal">${esc(u.key)}</span></td>
       <td class="actions">
-        <button class="btn btn-outline btn-sm" onclick="copyKey('${esc(u.key)}')">Copy</button>
-        <button class="btn btn-outline btn-sm" onclick="rotateKey('${esc(u.devId)}')">Rotate</button>
-        <button class="btn btn-danger btn-sm" onclick="removeDev('${esc(u.devId)}')">Remove</button>
+        <button class="btn btn-outline btn-sm" onclick="copyKey(${jsq(u.key)})">Copy</button>
+        <button class="btn btn-outline btn-sm" onclick="rotateKey(${jsq(u.devId)})">Rotate</button>
+        <button class="btn btn-danger btn-sm" onclick="removeDev(${jsq(u.devId)})">Remove</button>
       </td>
     </tr>
   `).join('');
@@ -312,10 +320,8 @@ async function rotateKey(devId) {
   else toast('Error: ' + (data.error || 'Unknown'));
 }
 async function removeDev(devId) {
-  const pwd = prompt('To remove ' + devId + ', enter the admin password:');
-  if (pwd === null) return;
-  if (!pwd.trim()) { toast('Password required to remove a user'); return; }
-  const res = await fetch('/api/team/admin/remove', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': pwd.trim() }, body: JSON.stringify({ devId }) });
+  if (!confirm('Remove developer ' + devId + ' from the allowlist?')) return;
+  const res = await fetch('/api/team/admin/remove', { method: 'POST', headers: headers(), body: JSON.stringify({ devId }) });
   const data = await res.json();
   if (data.ok) { toast('Removed ' + devId); loadKeys(); }
   else toast('Error: ' + (data.error || 'Unknown'));
@@ -582,7 +588,7 @@ function renderPerf() {
         const wowPct = wow ? wow.queries.pct : 0;
         const trendColor = d.trend > 10 ? 'var(--emerald)' : d.trend < -10 ? 'var(--rose)' : 'var(--text-tertiary)';
         const expanded = expandedDev === d.devId;
-        return `<tr onclick="toggleDevDetail('${esc(d.devId)}')" style="cursor:pointer;${expanded ? 'background:#F5F3FF;' : ''}">
+        return `<tr onclick="toggleDevDetail(${jsq(d.devId)})" style="cursor:pointer;${expanded ? 'background:#F5F3FF;' : ''}">
           <td class="dev-link" style="${expanded ? 'color:var(--indigo)' : ''}">${esc(d.devId)}</td>
           <td><span class="grade ${g.cls}">${g.letter}</span></td>
           <td class="num" style="font-weight:700">${Math.round(d.healthScore)}</td>
@@ -871,7 +877,7 @@ function renderAIReview(devId) {
   const cached = aiReviews[devId];
   if (cached) return formatAIReview(cached);
   if (!AI_CONFIGURED) return `<div style="font-size:12px;color:var(--text-tertiary);padding:12px;border:1px dashed var(--border);border-radius:8px;text-align:center">AI Review not available (GOOGLE_CREDENTIALS_BASE64 not set)</div>`;
-  return `<button class="btn btn-ai" id="aiBtn_${esc(devId)}" onclick="requestAIReview('${esc(devId)}')">
+  return `<button class="btn btn-ai" id="aiBtn_${esc(devId)}" onclick="requestAIReview(${jsq(devId)})">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
     Generate AI Performance Review
   </button>`;
@@ -951,14 +957,14 @@ function exportPerfCSV() {
   const headers = ['Developer','Grade','Health Score','Sessions','Queries','Avg Depth','Tool Activation %','Cache Hit %','Unique Tools','Active Days','Streak','Trend %','Cost ($)','Tokens','Top Project'];
   const rows = devs.map(d => {
     const topProj = Object.entries(d.projectUsage || {}).sort((a, b) => b[1].tokens - a[1].tokens)[0];
-    return [
+    return csvRow([
       d.devId, d.gradeInfo.letter, Math.round(d.healthScore), d.sessions, d.queries,
       d.avgQueriesPerSession, d.toolActivationRate, d.cacheHitRate.toFixed(1),
       d.uniqueTools, d.activeDays, d.streak, d.trend, d.cost.toFixed(2), d.totalTokens,
       topProj ? topProj[0].split(/[-/]/).pop() : ''
-    ].join(',');
+    ]);
   });
-  const csv = [headers.join(','), ...rows].join('\n');
+  const csv = [csvRow(headers), ...rows].join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);

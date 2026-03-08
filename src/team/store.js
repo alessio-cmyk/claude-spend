@@ -90,18 +90,21 @@ async function saveDeveloper(devId, data, timezone) {
   }
 }
 
+function migrateSessionsIfNeeded(data, fp) {
+  if (data.sessions && data.sessions.some(s => s.queries && s.queries.length > 0)) {
+    data.sessions = data.sessions.map(compactSession);
+    fs.writeFileSync(fp, JSON.stringify(data));
+    uploadFile(fp);
+  }
+}
+
 function loadDeveloper(devId) {
   ensureDir();
   const fp = devPath(devId);
   if (!fs.existsSync(fp)) return null;
   try {
     const data = JSON.parse(fs.readFileSync(fp, 'utf-8'));
-    // Migrate: compact any sessions that still have raw queries[]
-    if (data.sessions && data.sessions.some(s => s.queries && s.queries.length > 0)) {
-      data.sessions = data.sessions.map(compactSession);
-      fs.writeFileSync(fp, JSON.stringify(data));
-      uploadFile(fp);
-    }
+    migrateSessionsIfNeeded(data, fp);
     return data;
   } catch { return null; }
 }
@@ -140,11 +143,7 @@ function loadAllDevelopers() {
     try {
       const fp = path.join(DATA_DIR, f);
       const data = JSON.parse(fs.readFileSync(fp, 'utf-8'));
-      if (data.sessions && data.sessions.some(s => s.queries && s.queries.length > 0)) {
-        data.sessions = data.sessions.map(compactSession);
-        fs.writeFileSync(fp, JSON.stringify(data));
-        uploadFile(fp);
-      }
+      migrateSessionsIfNeeded(data, fp);
       return data;
     } catch { return null; }
   }).filter(Boolean);
@@ -318,7 +317,7 @@ function computeTotalsFromDaily(dailyUsage, sessions) {
     totalOutputTokens: 0,
     totalCacheReadTokens: 0,
     totalCacheCreationTokens: 0,
-    totalCost: totalCost,
+    totalCost,
     totalQueries,
     totalSessions: sessions.length,
   };

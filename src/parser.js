@@ -64,6 +64,18 @@ function extractSessionData(entries) {
   const queries = [];
   let pendingUserMessage = null;
 
+  function getUserText(content) {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      return content
+        .filter(b => b && b.type === 'text' && typeof b.text === 'string')
+        .map(b => b.text)
+        .join('\n')
+        .trim();
+    }
+    return '';
+  }
+
   for (const entry of entries) {
     if (entry.type === 'user' && entry.message?.role === 'user') {
       const content = entry.message.content;
@@ -73,9 +85,7 @@ function extractSessionData(entries) {
         content.startsWith('<command-name')
       )) continue;
 
-      const textContent = typeof content === 'string'
-        ? content
-        : content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+      const textContent = getUserText(content);
       pendingUserMessage = {
         text: textContent || null,
         timestamp: entry.timestamp,
@@ -101,7 +111,7 @@ function extractSessionData(entries) {
       const tools = [];
       if (Array.isArray(entry.message.content)) {
         for (const block of entry.message.content) {
-          if (block.type === 'tool_use' && block.name) tools.push(block.name);
+          if (block && block.type === 'tool_use' && typeof block.name === 'string') tools.push(block.name);
         }
       }
 
@@ -708,4 +718,4 @@ function fmt(n) {
   return n.toLocaleString();
 }
 
-module.exports = { parseAllSessions };
+module.exports = { parseAllSessions, extractSessionData };

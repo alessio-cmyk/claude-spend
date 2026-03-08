@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { saveDeveloper, loadDeveloper, listDevelopers, filterSessions, computeTotalsFromDaily, snapshotHealthHistory, loadHealthHistory } = require('./store');
 const { getProductivityAnalytics, getWeekOverWeekDeltas, getInactivityStatus } = require('./analytics');
+const { uploadFile } = require('./s3');
 
 /* === Allowlist-based auth === */
 const ALLOWLIST_PATH = path.join(process.env.CLAUDE_SPEND_DATA || path.join(process.cwd(), 'data', 'team'), 'allowlist.json');
@@ -23,6 +24,40 @@ function resolveKey(key) {
   const { data: allowlist } = loadAllowlist();
   if (!allowlist) return null;
   return allowlist.find(u => u.key === key) || null;
+}
+
+function normalizeDevIdBase(name) {
+  const raw = String(name || '').trim();
+  const first = raw.split(/\s+/)[0] || '';
+  return first.replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
+function generateUniqueDevId(name, allowlist) {
+  const base = normalizeDevIdBase(name);
+  if (!base) return null;
+  const taken = new Set((allowlist || []).map(u => String(u.devId || '').toLowerCase()));
+  if (!taken.has(base.toLowerCase())) return base;
+  for (let i = 2; i <= 9999; i++) {
+    const candidate = `${base}${i}`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+  return null;
+}
+
+function sanitizeProjectTagsInput(tags) {
+  if (!tags || typeof tags !== 'object' || Array.isArray(tags)) return null;
+  const safe = {};
+  const forbidden = new Set(['__proto__', 'prototype', 'constructor']);
+  for (const [k, v] of Object.entries(tags)) {
+    if (forbidden.has(k)) continue;
+    if (typeof k !== 'string' || typeof v !== 'string') continue;
+    const key = k.trim();
+    const value = v.trim();
+    if (!key || !value) continue;
+    if (key.length > 200 || value.length > 100) continue;
+    safe[key] = value;
+  }
+  return safe;
 }
 
 function validateSync(devId, key) {
@@ -174,15 +209,15 @@ function createTeamRouter() {
 
   // GET /api/team/dev/:devId - Full data for one developer
   // ?from=YYYY-MM-DD&to=YYYY-MM-DD for date range filtering
-  // ?lite=1 to strip per-query data (smaller response)
   router.get('/dev/:devId', (req, res) => {
     try {
       const data = loadDeveloper(req.params.devId);
       if (!data) return res.status(404).json({ error: 'Developer not found' });
-      const { from, to, lite } = req.query;
+      const { from, to } = req.query;
       let sessions = data.sessions || [];
       let dailyUsage = data.dailyUsage || [];
 
+      let totals = data.totals;
       if (from || to) {
         sessions = filterSessions(sessions, from, to);
         dailyUsage = dailyUsage.filter(d => {
@@ -190,16 +225,10 @@ function createTeamRouter() {
           if (to && d.date > to) return false;
           return true;
         });
-        // Compute totals from filtered daily usage (accurate for multi-day sessions)
-        const totals = computeTotalsFromDaily(dailyUsage, sessions);
-        if (lite) return res.json({ ...data, sessions, totals, dailyUsage });
-        return res.json({ ...data, sessions, totals, dailyUsage });
+        totals = computeTotalsFromDaily(dailyUsage, sessions);
       }
 
-      if (lite) {
-        return res.json({ ...data, sessions, totals: data.totals, dailyUsage });
-      }
-      res.json(data);
+      res.json({ ...data, sessions, totals, dailyUsage });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -309,7 +338,6 @@ function createTeamRouter() {
     const salt = process.env.HMAC_SALT || 'rotate-' + Date.now();
     entry.key = crypto.createHmac('md5', salt).update(entry.email + '-' + Date.now()).digest('hex');
     fs.writeFileSync(ALLOWLIST_PATH, JSON.stringify(data, null, 2));
-    const { uploadFile } = require('./s3');
     uploadFile(ALLOWLIST_PATH);
     res.json({ ok: true, devId, newKey: entry.key });
   });
@@ -323,12 +351,12 @@ function createTeamRouter() {
     let list = (exists && !corrupt && data) ? data : [];
     if (list.find(u => u.email === email.toLowerCase())) return res.status(409).json({ error: 'Email already exists' });
     const salt = process.env.HMAC_SALT || 'default';
-    const devId = name.split(/\s+/)[0];
+    const devId = generateUniqueDevId(name, list);
+    if (!devId) return res.status(400).json({ error: 'Invalid name. Could not derive devId.' });
     const key = crypto.createHmac('md5', salt).update(email.toLowerCase()).digest('hex');
     list.push({ devId, name, email: email.toLowerCase(), key });
     fs.mkdirSync(path.dirname(ALLOWLIST_PATH), { recursive: true });
     fs.writeFileSync(ALLOWLIST_PATH, JSON.stringify(list, null, 2));
-    const { uploadFile } = require('./s3');
     uploadFile(ALLOWLIST_PATH);
     res.json({ ok: true, devId, key });
   });
@@ -343,7 +371,6 @@ function createTeamRouter() {
     const filtered = data.filter(u => u.devId !== devId);
     if (filtered.length === data.length) return res.status(404).json({ error: 'Developer not found' });
     fs.writeFileSync(ALLOWLIST_PATH, JSON.stringify(filtered, null, 2));
-    const { uploadFile } = require('./s3');
     uploadFile(ALLOWLIST_PATH);
     res.json({ ok: true, removed: devId });
   });
@@ -436,13 +463,18 @@ function createTeamRouter() {
   router.post('/project-tags', express.json(), (req, res) => {
     if (!checkAdmin(req, res)) return;
     const { tags } = req.body;
-    if (!tags || typeof tags !== 'object') return res.status(400).json({ error: 'Missing tags object' });
-    const existing = loadProjectTags();
-    const merged = { ...existing, ...tags };
-    for (const k of Object.keys(merged)) { if (!merged[k]) delete merged[k]; }
+    const safeTags = sanitizeProjectTagsInput(tags);
+    if (!safeTags) return res.status(400).json({ error: 'Missing tags object' });
+    const existing = sanitizeProjectTagsInput(loadProjectTags()) || {};
+    const merged = { ...existing, ...safeTags };
+    const forbidden = new Set(['__proto__', 'prototype', 'constructor']);
+    for (const [k, v] of Object.entries(tags || {})) {
+      if (forbidden.has(k)) continue;
+      if (typeof k !== 'string') continue;
+      if (v === '' || v === null) delete merged[k];
+    }
     fs.mkdirSync(path.dirname(TAGS_PATH), { recursive: true });
     fs.writeFileSync(TAGS_PATH, JSON.stringify(merged, null, 2));
-    const { uploadFile } = require('./s3');
     uploadFile(TAGS_PATH);
     res.json({ ok: true, tags: merged });
   });
@@ -462,4 +494,4 @@ function computeHealthScore(d) {
   return Math.round((qDepth + toolAct + toolDiv + cache + modelDisc + consist) * 10) / 10;
 }
 
-module.exports = { createTeamRouter };
+module.exports = { createTeamRouter, generateUniqueDevId, sanitizeProjectTagsInput };
