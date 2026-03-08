@@ -32,31 +32,53 @@ function getProductivityAnalytics(fromDate, toDate) {
 
     const totals = computeTotals(sessions);
 
-    // Daily breakdown
+    // Daily breakdown — use per-query daily breakdown if available
     const dailyMap = {};
     for (const s of sessions) {
       if (!s.date || s.date === 'unknown') continue;
-      if (!dailyMap[s.date]) dailyMap[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0, outputTokens: 0, inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
-      dailyMap[s.date].tokens += s.totalTokens || 0;
-      dailyMap[s.date].cost += s.cost || 0;
-      dailyMap[s.date].sessions += 1;
-      dailyMap[s.date].queries += s.queryCount || 0;
-      dailyMap[s.date].outputTokens += s.outputTokens || 0;
-      dailyMap[s.date].inputTokens += s.inputTokens || 0;
-      dailyMap[s.date].cacheReadTokens += s.cacheReadTokens || 0;
-      dailyMap[s.date].cacheCreationTokens += s.cacheCreationTokens || 0;
+      if (s._dailyBreakdown) {
+        // Use per-query daily breakdown for accurate attribution
+        const sessionDays = new Set();
+        for (const [day, stats] of Object.entries(s._dailyBreakdown)) {
+          if (!dailyMap[day]) dailyMap[day] = { date: day, tokens: 0, cost: 0, sessions: 0, queries: 0, outputTokens: 0, inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
+          dailyMap[day].tokens += stats.tokens || 0;
+          dailyMap[day].cost += stats.cost || 0;
+          dailyMap[day].queries += stats.queries || 0;
+          sessionDays.add(day);
 
-      // Team daily
-      if (!teamDaily[s.date]) teamDaily[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0, activeDevs: new Set(), inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
-      teamDaily[s.date].tokens += s.totalTokens || 0;
-      teamDaily[s.date].cost += s.cost || 0;
-      teamDaily[s.date].sessions += 1;
-      teamDaily[s.date].queries += s.queryCount || 0;
-      teamDaily[s.date].activeDevs.add(dev.devId);
-      teamDaily[s.date].inputTokens += s.inputTokens || 0;
-      teamDaily[s.date].outputTokens += s.outputTokens || 0;
-      teamDaily[s.date].cacheReadTokens += s.cacheReadTokens || 0;
-      teamDaily[s.date].cacheCreationTokens += s.cacheCreationTokens || 0;
+          if (!teamDaily[day]) teamDaily[day] = { date: day, tokens: 0, cost: 0, sessions: 0, queries: 0, activeDevs: new Set(), inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
+          teamDaily[day].tokens += stats.tokens || 0;
+          teamDaily[day].cost += stats.cost || 0;
+          teamDaily[day].queries += stats.queries || 0;
+          teamDaily[day].activeDevs.add(dev.devId);
+        }
+        for (const d of sessionDays) {
+          dailyMap[d].sessions += 1;
+          teamDaily[d].sessions += 1;
+        }
+      } else {
+        // Fallback: attribute all to session start date
+        if (!dailyMap[s.date]) dailyMap[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0, outputTokens: 0, inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
+        dailyMap[s.date].tokens += s.totalTokens || 0;
+        dailyMap[s.date].cost += s.cost || 0;
+        dailyMap[s.date].sessions += 1;
+        dailyMap[s.date].queries += s.queryCount || 0;
+        dailyMap[s.date].outputTokens += s.outputTokens || 0;
+        dailyMap[s.date].inputTokens += s.inputTokens || 0;
+        dailyMap[s.date].cacheReadTokens += s.cacheReadTokens || 0;
+        dailyMap[s.date].cacheCreationTokens += s.cacheCreationTokens || 0;
+
+        if (!teamDaily[s.date]) teamDaily[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0, activeDevs: new Set(), inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
+        teamDaily[s.date].tokens += s.totalTokens || 0;
+        teamDaily[s.date].cost += s.cost || 0;
+        teamDaily[s.date].sessions += 1;
+        teamDaily[s.date].queries += s.queryCount || 0;
+        teamDaily[s.date].activeDevs.add(dev.devId);
+        teamDaily[s.date].inputTokens += s.inputTokens || 0;
+        teamDaily[s.date].outputTokens += s.outputTokens || 0;
+        teamDaily[s.date].cacheReadTokens += s.cacheReadTokens || 0;
+        teamDaily[s.date].cacheCreationTokens += s.cacheCreationTokens || 0;
+      }
     }
 
     // Model usage (from pre-aggregated _models or fallback to queries[])

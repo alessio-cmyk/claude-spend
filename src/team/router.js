@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { saveDeveloper, loadDeveloper, listDevelopers, filterSessions, computeTotals, snapshotHealthHistory, loadHealthHistory } = require('./store');
+const { saveDeveloper, loadDeveloper, listDevelopers, filterSessions, computeTotalsFromDaily, snapshotHealthHistory, loadHealthHistory } = require('./store');
 const { getProductivityAnalytics, getWeekOverWeekDeltas, getInactivityStatus } = require('./analytics');
 
 /* === Allowlist-based auth === */
@@ -136,7 +136,12 @@ function createTeamRouter() {
           const full = loadDeveloper(d.devId);
           if (!full) return null;
           const filtered = filterSessions(full.sessions || [], from, to);
-          const totals = computeTotals(filtered);
+          const filteredDaily = (full.dailyUsage || []).filter(dy => {
+            if (from && dy.date < from) return false;
+            if (to && dy.date > to) return false;
+            return true;
+          });
+          const totals = computeTotalsFromDaily(filteredDaily, filtered);
           return { devId: d.devId, lastSync: d.lastSync, ...totals };
         }
         const t = d.totals || {};
@@ -185,16 +190,14 @@ function createTeamRouter() {
           if (to && d.date > to) return false;
           return true;
         });
-      }
-
-      if (lite) {
-        // Sessions are already compacted (no queries[]), just pass through
-        const totals = from || to ? computeTotals(sessions) : data.totals;
+        // Compute totals from filtered daily usage (accurate for multi-day sessions)
+        const totals = computeTotalsFromDaily(dailyUsage, sessions);
+        if (lite) return res.json({ ...data, sessions, totals, dailyUsage });
         return res.json({ ...data, sessions, totals, dailyUsage });
       }
 
-      if (from || to) {
-        return res.json({ ...data, sessions, totals: computeTotals(sessions), dailyUsage });
+      if (lite) {
+        return res.json({ ...data, sessions, totals: data.totals, dailyUsage });
       }
       res.json(data);
     } catch (err) {

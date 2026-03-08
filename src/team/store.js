@@ -304,8 +304,28 @@ function loadHealthHistory(days) {
   } catch { return []; }
 }
 
+// Compute totals from filtered daily usage (accurate for date-filtered multi-day sessions)
+function computeTotalsFromDaily(dailyUsage, sessions) {
+  let totalTokens = 0, totalCost = 0, totalQueries = 0;
+  for (const d of dailyUsage) {
+    totalTokens += d.tokens || 0;
+    totalCost += d.cost || 0;
+    totalQueries += d.queries || 0;
+  }
+  return {
+    totalTokens,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    totalCacheReadTokens: 0,
+    totalCacheCreationTokens: 0,
+    totalCost: totalCost,
+    totalQueries,
+    totalSessions: sessions.length,
+  };
+}
+
 module.exports = {
   saveDeveloper, loadDeveloper, listDevelopers, loadAllDevelopers,
-  computeTotals, computeDailyUsage, filterSessions,
+  computeTotals, computeTotalsFromDaily, computeDailyUsage, filterSessions,
   snapshotHealthHistory, loadHealthHistory,
 };
