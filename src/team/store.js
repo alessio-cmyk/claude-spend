@@ -5,6 +5,17 @@ const { uploadFile } = require('./s3');
 const DATA_DIR = process.env.CLAUDE_SPEND_DATA || path.join(process.cwd(), 'data', 'team');
 const ARCHIVE_DIR = path.join(DATA_DIR, 'archive');
 
+/* === File-level locking to prevent race conditions on concurrent syncs === */
+const _locks = new Map();
+function acquireLock(key) {
+  if (!_locks.has(key)) _locks.set(key, Promise.resolve());
+  let release;
+  const next = new Promise(resolve => { release = resolve; });
+  const prev = _locks.get(key);
+  _locks.set(key, next);
+  return prev.then(() => release);
+}
+
 function ensureDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.mkdirSync(ARCHIVE_DIR, { recursive: true });
@@ -16,42 +27,55 @@ function devPath(devId) {
   return path.join(DATA_DIR, safe + '.json');
 }
 
-function saveDeveloper(devId, data) {
-  ensureDir();
-  const fp = devPath(devId);
-  let existing = { devId, sessions: [], dailyUsage: [], totals: {} };
+async function saveDeveloper(devId, data, timezone) {
+  const release = await acquireLock('dev:' + devId);
+  try {
+    ensureDir();
+    const fp = devPath(devId);
+    let existing = { devId, sessions: [], dailyUsage: [], totals: {} };
 
-  if (fs.existsSync(fp)) {
-    try { existing = JSON.parse(fs.readFileSync(fp, 'utf-8')); } catch {}
+    if (fs.existsSync(fp)) {
+      try { existing = JSON.parse(fs.readFileSync(fp, 'utf-8')); } catch {}
+    }
+
+    // Merge sessions by sessionId (deduplicate)
+    const existingIds = new Set((existing.sessions || []).map(s => s.sessionId));
+    const rawNewSessions = (data.sessions || []).filter(s => !existingIds.has(s.sessionId));
+
+    // Archive full sessions with queries[] before compacting
+    if (rawNewSessions.length > 0) {
+      const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+      const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
+      const lines = rawNewSessions.map(s => JSON.stringify(s)).join('\n') + '\n';
+      fs.appendFileSync(archivePath, lines);
+      uploadFile(archivePath);
+    }
+
+    const newSessions = rawNewSessions.map(compactSession);
+    const merged = [...(existing.sessions || []), ...newSessions];
+
+    // Persist client timezone if provided
+    if (timezone) existing.timezone = timezone;
+
+    const result = {
+      devId,
+      lastSync: new Date().toISOString(),
+      timezone: existing.timezone || null,
+      sessions: merged,
+      totals: computeTotals(merged),
+      dailyUsage: computeDailyUsage(merged),
+    };
+
+    // Atomic write: write to temp file, then rename
+    const tmpPath = fp + '.tmp.' + process.pid;
+    fs.writeFileSync(tmpPath, JSON.stringify(result));
+    fs.renameSync(tmpPath, fp);
+    uploadFile(fp);
+    invalidateDevCache();
+    return result;
+  } finally {
+    release();
   }
-
-  // Merge sessions by sessionId (deduplicate)
-  const existingIds = new Set((existing.sessions || []).map(s => s.sessionId));
-  const rawNewSessions = (data.sessions || []).filter(s => !existingIds.has(s.sessionId));
-
-  // Archive full sessions with queries[] before compacting
-  if (rawNewSessions.length > 0) {
-    const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-    const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
-    const lines = rawNewSessions.map(s => JSON.stringify(s)).join('\n') + '\n';
-    fs.appendFileSync(archivePath, lines);
-    uploadFile(archivePath);
-  }
-
-  const newSessions = rawNewSessions.map(compactSession);
-  const merged = [...(existing.sessions || []), ...newSessions];
-
-  const result = {
-    devId,
-    lastSync: new Date().toISOString(),
-    sessions: merged,
-    totals: computeTotals(merged),
-    dailyUsage: computeDailyUsage(merged),
-  };
-
-  fs.writeFileSync(fp, JSON.stringify(result));
-  uploadFile(fp);
-  return result;
 }
 
 function loadDeveloper(devId) {
@@ -71,7 +95,7 @@ function loadDeveloper(devId) {
 }
 
 /* === FEATURE 3: Files to exclude from developer listings === */
-const NON_DEV_FILES = new Set(['health-history.json', 'allowlist.json']);
+const NON_DEV_FILES = new Set(['health-history.json', 'allowlist.json', 'project-tags.json']);
 
 function listDevelopers() {
   ensureDir();
@@ -89,10 +113,18 @@ function listDevelopers() {
   }).filter(Boolean);
 }
 
+/* === Dev data cache (TTL-based, invalidated on save) === */
+let _allDevsCache = null;
+let _allDevsCacheTime = 0;
+const CACHE_TTL_MS = 10000; // 10s
+
+function invalidateDevCache() { _allDevsCache = null; _allDevsCacheTime = 0; }
+
 function loadAllDevelopers() {
+  if (_allDevsCache && (Date.now() - _allDevsCacheTime) < CACHE_TTL_MS) return _allDevsCache;
   ensureDir();
   const files = fs.readdirSync(DATA_DIR).filter(f => f.endsWith('.json') && !NON_DEV_FILES.has(f));
-  return files.map(f => {
+  const result = files.map(f => {
     try {
       const fp = path.join(DATA_DIR, f);
       const data = JSON.parse(fs.readFileSync(fp, 'utf-8'));
@@ -104,6 +136,9 @@ function loadAllDevelopers() {
       return data;
     } catch { return null; }
   }).filter(Boolean);
+  _allDevsCache = result;
+  _allDevsCacheTime = Date.now();
+  return result;
 }
 
 function computeTotals(sessions) {

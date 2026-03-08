@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { saveDeveloper, loadDeveloper, listDevelopers, filterSessions, computeTotals, snapshotHealthHistory, loadHealthHistory } = require('./store');
 const { getProductivityAnalytics, getWeekOverWeekDeltas, getInactivityStatus } = require('./analytics');
 
@@ -8,24 +9,53 @@ const { getProductivityAnalytics, getWeekOverWeekDeltas, getInactivityStatus } =
 const ALLOWLIST_PATH = path.join(process.env.CLAUDE_SPEND_DATA || path.join(process.cwd(), 'data', 'team'), 'allowlist.json');
 
 function loadAllowlist() {
-  if (!fs.existsSync(ALLOWLIST_PATH)) return null; // no allowlist = open mode
-  try { return JSON.parse(fs.readFileSync(ALLOWLIST_PATH, 'utf-8')); } catch { return null; }
+  if (!fs.existsSync(ALLOWLIST_PATH)) return { exists: false, data: null };
+  try {
+    const data = JSON.parse(fs.readFileSync(ALLOWLIST_PATH, 'utf-8'));
+    if (!Array.isArray(data)) return { exists: true, data: null, corrupt: true };
+    return { exists: true, data };
+  } catch {
+    return { exists: true, data: null, corrupt: true };
+  }
 }
 
 function resolveKey(key) {
-  const allowlist = loadAllowlist();
+  const { data: allowlist } = loadAllowlist();
   if (!allowlist) return null;
   return allowlist.find(u => u.key === key) || null;
 }
 
 function validateSync(devId, key) {
-  const allowlist = loadAllowlist();
-  if (!allowlist) return { ok: true }; // open mode — no allowlist file
+  const { exists, data: allowlist, corrupt } = loadAllowlist();
+  if (!exists) return { ok: true }; // open mode — no allowlist file
+  if (corrupt || !allowlist) return { ok: false, error: 'Server auth config is corrupted. Contact your admin.' };
   const entry = allowlist.find(u => u.devId === devId);
   if (!entry) return { ok: false, error: `Unknown developer "${devId}". Ask your admin for access.` };
   if (!key) return { ok: false, error: 'API key required. Use --key <your-key> when syncing.' };
   if (entry.key !== key) return { ok: false, error: 'Invalid API key for ' + devId };
   return { ok: true };
+}
+
+function buildTeamBaseline(allDevs, excludeDevId) {
+  const others = allDevs.filter(d => d.devId !== excludeDevId && d.sessions > 0);
+  if (others.length === 0) return null;
+  const avg = (arr, fn) => arr.reduce((s, d) => s + fn(d), 0) / arr.length;
+  const min = (arr, fn) => Math.min(...arr.map(fn));
+  const max = (arr, fn) => Math.max(...arr.map(fn));
+  const stat = (fn) => ({ avg: +avg(others, fn).toFixed(1), min: +min(others, fn).toFixed(1), max: +max(others, fn).toFixed(1) });
+  return {
+    teamSize: allDevs.length,
+    otherDevs: others.length,
+    queriesPerSession: stat(d => d.avgQueriesPerSession || 0),
+    costPerQuery: stat(d => d.queries ? d.cost / d.queries : 0),
+    cacheHitRate: stat(d => d.cacheHitRate || 0),
+    toolActivationRate: stat(d => d.toolActivationRate || 0),
+    outputRatio: stat(d => d.outputRatio || 0),
+    uniqueTools: stat(d => d.uniqueTools || 0),
+    sessions: stat(d => d.sessions || 0),
+    activeDays: stat(d => d.activeDays || 0),
+    healthScore: stat(d => d.healthScore || 0),
+  };
 }
 
 function createTeamRouter() {
@@ -41,8 +71,8 @@ function createTeamRouter() {
   });
 
   // POST /api/team/sync - Developer pushes their data
-  router.post('/sync', express.json({ limit: '50mb' }), (req, res) => {
-    let { devId, data, key } = req.body;
+  router.post('/sync', express.json({ limit: '50mb' }), async (req, res) => {
+    let { devId, data, key, timezone } = req.body;
     if (!data) {
       return res.status(400).json({ error: 'Missing data' });
     }
@@ -63,7 +93,7 @@ function createTeamRouter() {
       return res.status(403).json({ error: auth.error });
     }
     try {
-      const merged = saveDeveloper(devId, data);
+      const merged = await saveDeveloper(devId, data, timezone);
 
       /* === FEATURE 3: Snapshot health history on sync === */
       try {
@@ -196,7 +226,7 @@ function createTeamRouter() {
   router.get('/health', (req, res) => {
     try {
       const devs = listDevelopers();
-      const allowlist = loadAllowlist();
+      const { exists } = loadAllowlist();
       const lastSync = devs.reduce((latest, d) => {
         if (d.lastSync && (!latest || d.lastSync > latest)) return d.lastSync;
         return latest;
@@ -206,7 +236,7 @@ function createTeamRouter() {
         version: '1.0',
         devCount: devs.length,
         lastSync: lastSync || null,
-        authEnabled: !!allowlist,
+        authEnabled: exists,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -240,6 +270,178 @@ function createTeamRouter() {
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  /* === Admin API (password-protected) === */
+  const ADMIN_PASS = process.env.ADMIN_PASSWORD || null;
+
+  function checkAdmin(req, res) {
+    if (!ADMIN_PASS) { res.status(503).json({ error: 'Admin not configured. Set ADMIN_PASSWORD env var.' }); return false; }
+    const auth = req.headers.authorization;
+    if (!auth || auth !== 'Bearer ' + ADMIN_PASS) { res.status(401).json({ error: 'Invalid admin password' }); return false; }
+    return true;
+  }
+
+  // GET /api/team/admin/keys - List all keys
+  router.get('/admin/keys', (req, res) => {
+    if (!checkAdmin(req, res)) return;
+    const { exists, data, corrupt } = loadAllowlist();
+    if (!exists) return res.json({ keys: [], authEnabled: false });
+    if (corrupt) return res.status(500).json({ error: 'Allowlist is corrupted' });
+    res.json({ keys: data.map(u => {
+      const devData = loadDeveloper(u.devId);
+      return { devId: u.devId, name: u.name, email: u.email, key: u.key, timezone: devData?.timezone || null };
+    }), authEnabled: true });
+  });
+
+  // POST /api/team/admin/rotate - Rotate key for a developer
+  router.post('/admin/rotate', express.json(), (req, res) => {
+    if (!checkAdmin(req, res)) return;
+    const { devId } = req.body;
+    if (!devId) return res.status(400).json({ error: 'Missing devId' });
+    const { exists, data, corrupt } = loadAllowlist();
+    if (!exists || corrupt || !data) return res.status(500).json({ error: 'Allowlist not available' });
+    const entry = data.find(u => u.devId === devId);
+    if (!entry) return res.status(404).json({ error: 'Developer not found' });
+    const salt = process.env.HMAC_SALT || 'rotate-' + Date.now();
+    entry.key = crypto.createHmac('md5', salt).update(entry.email + '-' + Date.now()).digest('hex');
+    fs.writeFileSync(ALLOWLIST_PATH, JSON.stringify(data, null, 2));
+    const { uploadFile } = require('./s3');
+    uploadFile(ALLOWLIST_PATH);
+    res.json({ ok: true, devId, newKey: entry.key });
+  });
+
+  // POST /api/team/admin/add - Add a developer
+  router.post('/admin/add', express.json(), (req, res) => {
+    if (!checkAdmin(req, res)) return;
+    const { name, email } = req.body;
+    if (!name || !email) return res.status(400).json({ error: 'Missing name or email' });
+    const { exists, data, corrupt } = loadAllowlist();
+    let list = (exists && !corrupt && data) ? data : [];
+    if (list.find(u => u.email === email.toLowerCase())) return res.status(409).json({ error: 'Email already exists' });
+    const salt = process.env.HMAC_SALT || 'default';
+    const devId = name.split(/\s+/)[0];
+    const key = crypto.createHmac('md5', salt).update(email.toLowerCase()).digest('hex');
+    list.push({ devId, name, email: email.toLowerCase(), key });
+    fs.mkdirSync(path.dirname(ALLOWLIST_PATH), { recursive: true });
+    fs.writeFileSync(ALLOWLIST_PATH, JSON.stringify(list, null, 2));
+    const { uploadFile } = require('./s3');
+    uploadFile(ALLOWLIST_PATH);
+    res.json({ ok: true, devId, key });
+  });
+
+  // POST /api/team/admin/remove - Remove a developer from allowlist
+  router.post('/admin/remove', express.json(), (req, res) => {
+    if (!checkAdmin(req, res)) return;
+    const { devId } = req.body;
+    if (!devId) return res.status(400).json({ error: 'Missing devId' });
+    const { exists, data, corrupt } = loadAllowlist();
+    if (!exists || corrupt || !data) return res.status(500).json({ error: 'Allowlist not available' });
+    const filtered = data.filter(u => u.devId !== devId);
+    if (filtered.length === data.length) return res.status(404).json({ error: 'Developer not found' });
+    fs.writeFileSync(ALLOWLIST_PATH, JSON.stringify(filtered, null, 2));
+    const { uploadFile } = require('./s3');
+    uploadFile(ALLOWLIST_PATH);
+    res.json({ ok: true, removed: devId });
+  });
+
+  // POST /api/team/admin/ai-review - Generate AI performance review for a developer
+  router.post('/admin/ai-review', express.json(), async (req, res) => {
+    if (!checkAdmin(req, res)) return;
+    const { devId, from, to } = req.body;
+    if (!devId) return res.status(400).json({ error: 'Missing devId' });
+    const { isConfigured, generateDevReview } = require('./ai-review');
+    if (!isConfigured()) return res.status(503).json({ error: 'AI review not configured. Set GOOGLE_CREDENTIALS_BASE64 env var.' });
+    try {
+      const analytics = getProductivityAnalytics(from, to);
+      const devMetrics = analytics.developers.find(d => d.devId === devId);
+      if (!devMetrics) return res.status(404).json({ error: 'Developer not found' });
+      if (devMetrics.sessions === 0) return res.status(400).json({ error: 'No sessions in selected period' });
+      // Load full session data for rich AI review (includes prompts, tools, projects)
+      const devData = loadDeveloper(devId);
+      const allSessions = devData ? (devData.sessions || []) : [];
+      const sessions = filterSessions(allSessions, from, to);
+      // Build team baseline for comparative context
+      const allDevs = analytics.developers;
+      const teamBaseline = buildTeamBaseline(allDevs, devId);
+      const devTimezone = devData ? devData.timezone : null;
+      const review = await generateDevReview(devMetrics, sessions, teamBaseline, devTimezone);
+      res.json({ ok: true, devId, review });
+    } catch (err) {
+      res.status(500).json({ error: 'AI review failed: ' + err.message });
+    }
+  });
+
+  // GET /api/team/admin/ai-status - Check if AI review is configured
+  router.get('/admin/ai-status', (req, res) => {
+    if (!checkAdmin(req, res)) return;
+    const { isConfigured } = require('./ai-review');
+    res.json({ configured: isConfigured() });
+  });
+
+  // GET /api/team/prompt-quality - Score all devs' prompt quality via Gemini
+  router.get('/prompt-quality', async (req, res) => {
+    try {
+      const { isConfigured, getPromptQuality } = require('./ai-review');
+      if (!isConfigured()) return res.json({ error: 'AI not configured', scores: {} });
+
+      const { from, to } = req.query;
+      const allDevs = listDevelopers();
+      const devIds = allDevs.map(d => d.devId).filter(Boolean);
+      const scores = {};
+
+      // Process devs in parallel (max 4 concurrent to avoid rate limits)
+      const chunks = [];
+      for (let i = 0; i < devIds.length; i += 4) chunks.push(devIds.slice(i, i + 4));
+
+      for (const chunk of chunks) {
+        await Promise.all(chunk.map(async (devId) => {
+          try {
+            const devData = loadDeveloper(devId);
+            if (!devData || !devData.sessions || devData.sessions.length === 0) {
+              scores[devId] = { score: 0, rating: 'none', feedback: 'No sessions.' };
+              return;
+            }
+            const sessions = (from || to) ? filterSessions(devData.sessions, from, to) : devData.sessions;
+            scores[devId] = await getPromptQuality(devId, sessions);
+          } catch (e) {
+            scores[devId] = { score: 0, rating: 'error', feedback: e.message };
+          }
+        }));
+      }
+
+      res.json({ scores });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  /* === Project Tagging === */
+  const TAGS_PATH = path.join(process.env.CLAUDE_SPEND_DATA || path.join(process.cwd(), 'data', 'team'), 'project-tags.json');
+
+  function loadProjectTags() {
+    if (!fs.existsSync(TAGS_PATH)) return {};
+    try { return JSON.parse(fs.readFileSync(TAGS_PATH, 'utf-8')); } catch { return {}; }
+  }
+
+  // GET /api/team/project-tags
+  router.get('/project-tags', (req, res) => {
+    res.json(loadProjectTags());
+  });
+
+  // POST /api/team/project-tags (admin only) - { tags: { "project-name": "tag", ... } }
+  router.post('/project-tags', express.json(), (req, res) => {
+    if (!checkAdmin(req, res)) return;
+    const { tags } = req.body;
+    if (!tags || typeof tags !== 'object') return res.status(400).json({ error: 'Missing tags object' });
+    const existing = loadProjectTags();
+    const merged = { ...existing, ...tags };
+    for (const k of Object.keys(merged)) { if (!merged[k]) delete merged[k]; }
+    fs.mkdirSync(path.dirname(TAGS_PATH), { recursive: true });
+    fs.writeFileSync(TAGS_PATH, JSON.stringify(merged, null, 2));
+    const { uploadFile } = require('./s3');
+    uploadFile(TAGS_PATH);
+    res.json({ ok: true, tags: merged });
   });
 
   return router;

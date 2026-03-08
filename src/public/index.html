@@ -887,7 +887,11 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
+Chart.defaults.font.family = "'Inter', sans-serif";
+const _chartInstances = {};
+
 let DATA = null;
 let currentSort = { key: 'total', dir: 'desc' };
 let searchQuery = '';
@@ -1082,103 +1086,47 @@ function renderInsights() {
   }).join('');
 }
 
-// Daily chart -- 3 color stacked bars
+// Daily chart -- stacked bar (Chart.js)
 function renderDailyChart() {
   const canvas = document.getElementById('dailyChart');
-  const ctx = canvas.getContext('2d');
   const data = DATA.dailyUsage;
   if (!data.length) return;
 
-  const dpr = window.devicePixelRatio || 1;
-  const w = canvas.parentElement.clientWidth - 48;
-  const h = 200;
-  canvas.width = w * dpr; canvas.height = h * dpr;
-  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, w, h);
+  if (_chartInstances['dailyChart']) { _chartInstances['dailyChart'].destroy(); }
 
-  const maxTotal = Math.max(...data.map(d => d.totalTokens));
-  const barW = Math.max(8, Math.min(32, (w - 52) / data.length - 3));
-  const gap = 3;
-  const chartH = h - 36;
-  const startX = 48;
-
-  // Grid
-  ctx.font = '500 10px Inter, system-ui';
-  ctx.fillStyle = '#94A3B8';
-  ctx.textAlign = 'right';
-  for (let i = 0; i <= 4; i++) {
-    const val = (maxTotal / 4) * i;
-    const y = chartH - (chartH * i / 4) + 8;
-    ctx.fillText(fmt(val), startX - 10, y + 3);
-    ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(startX, y); ctx.lineTo(w, y); ctx.stroke();
-  }
-
-  // Gradients
-  const inGrad = ctx.createLinearGradient(0, chartH + 8, 0, 0);
-  inGrad.addColorStop(0, '#818CF8'); inGrad.addColorStop(1, '#6366F1');
-  const cacheWriteGrad = ctx.createLinearGradient(0, chartH + 8, 0, 0);
-  cacheWriteGrad.addColorStop(0, '#FB7185'); cacheWriteGrad.addColorStop(1, '#F43F5E');
-  const cacheReadGrad = ctx.createLinearGradient(0, chartH + 8, 0, 0);
-  cacheReadGrad.addColorStop(0, '#FBBF24'); cacheReadGrad.addColorStop(1, '#F59E0B');
-  const outGrad = ctx.createLinearGradient(0, chartH + 8, 0, 0);
-  outGrad.addColorStop(0, '#2DD4BF'); outGrad.addColorStop(1, '#14B8A6');
-
-  const minH = 3; // minimum pixel height so small segments stay visible
-
-  data.forEach((d, i) => {
-    const x = startX + i * (barW + gap);
-    const baseY = chartH + 8;
-    const r = Math.min(4, barW / 2);
-    let y = baseY;
-
-    // Bottom: output (teal)
-    let outH = (d.outputTokens / maxTotal) * chartH;
-    if (d.outputTokens > 0) outH = Math.max(minH, outH);
-    if (outH > 0) {
-      ctx.fillStyle = outGrad;
-      ctx.beginPath(); roundedRect(ctx, x, y - outH, barW, outH, r); ctx.fill();
-      y -= outH;
-    }
-
-    // Cache reads (amber)
-    let cacheRH = ((d.cacheReadTokens || 0) / maxTotal) * chartH;
-    if ((d.cacheReadTokens || 0) > 0) cacheRH = Math.max(minH, cacheRH);
-    if (cacheRH > 0) {
-      ctx.fillStyle = cacheReadGrad;
-      ctx.beginPath(); roundedRect(ctx, x, y - cacheRH, barW, cacheRH, 0); ctx.fill();
-      y -= cacheRH;
-    }
-
-    // Cache writes (rose)
-    let cacheWH = ((d.cacheCreationTokens || 0) / maxTotal) * chartH;
-    if ((d.cacheCreationTokens || 0) > 0) cacheWH = Math.max(minH, cacheWH);
-    if (cacheWH > 0) {
-      ctx.fillStyle = cacheWriteGrad;
-      ctx.beginPath(); roundedRect(ctx, x, y - cacheWH, barW, cacheWH, 0); ctx.fill();
-      y -= cacheWH;
-    }
-
-    // Top: input (indigo)
-    let freshH = (d.inputTokens / maxTotal) * chartH;
-    if (d.inputTokens > 0) freshH = Math.max(minH, freshH);
-    if (freshH > 0) {
-      ctx.fillStyle = inGrad;
-      ctx.beginPath(); roundedRect(ctx, x, y - freshH, barW, freshH, r); ctx.fill();
-      y -= freshH;
-    }
-  });
-
-  // X labels
-  ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'center';
-  ctx.font = '500 10px Inter, system-ui';
-  const step = Math.max(1, Math.floor(data.length / 7));
-  data.forEach((d, i) => {
-    if (i % step === 0 || i === data.length - 1) {
-      const x = startX + i * (barW + gap) + barW / 2;
-      ctx.fillText(formatDate(d.date), x, chartH + 24);
-    }
+  const labels = data.map(d => formatDate(d.date));
+  _chartInstances['dailyChart'] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Input Tokens', data: data.map(d => d.inputTokens), backgroundColor: '#6366F1', borderRadius: 3 },
+        { label: 'Cache Writes', data: data.map(d => d.cacheCreationTokens || 0), backgroundColor: '#F43F5E', borderRadius: 0 },
+        { label: 'Cache Reads', data: data.map(d => d.cacheReadTokens || 0), backgroundColor: '#F59E0B', borderRadius: 0 },
+        { label: 'Output Tokens', data: data.map(d => d.outputTokens), backgroundColor: '#14B8A6', borderRadius: 3 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      scales: {
+        x: {
+          stacked: true,
+          ticks: { color: '#94A3B8', font: { size: 10, weight: 500 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
+          grid: { display: false },
+        },
+        y: {
+          stacked: true,
+          ticks: { color: '#94A3B8', font: { size: 10, weight: 500 }, callback: v => fmt(v) },
+          grid: { color: 'rgba(0,0,0,0.04)' },
+          border: { display: false },
+        },
+      },
+      plugins: {
+        legend: { display: true, position: 'top', labels: { boxWidth: 10, padding: 12, color: '#475569', font: { size: 11, weight: 500 } } },
+        tooltip: { mode: 'index', intersect: false },
+      },
+    },
   });
 }
 
@@ -1197,60 +1145,80 @@ function roundedRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-// Model donut
+// Model donut (Chart.js)
 function renderModelChart() {
   const canvas = document.getElementById('modelChart');
-  const ctx = canvas.getContext('2d');
   const data = DATA.modelBreakdown;
   if (!data.length) return;
 
-  const dpr = window.devicePixelRatio || 1;
-  const size = Math.min(180, canvas.parentElement.clientWidth - 48);
-  canvas.width = size * dpr; canvas.height = size * dpr;
-  canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
-  ctx.scale(dpr, dpr);
+  if (_chartInstances['modelChart']) { _chartInstances['modelChart'].destroy(); }
 
-  const cx = size/2, cy = size/2, r = size/2 - 6, innerR = r * 0.6;
-  const total = data.reduce((s, d) => s + d.totalTokens, 0);
-
-  const modelColors = { opus: ['#6366F1','#818CF8'], sonnet: ['#10B981','#34D399'], haiku: ['#F97316','#FB923C'] };
-  function getColors(m) {
-    for (const [k, c] of Object.entries(modelColors)) { if (m.includes(k)) return c; }
-    return ['#94A3B8','#CBD5E1'];
+  const modelColorMap = { opus: '#6366F1', sonnet: '#10B981', haiku: '#F97316' };
+  function getColor(m) {
+    for (const [k, c] of Object.entries(modelColorMap)) { if (m.includes(k)) return c; }
+    return '#94A3B8';
   }
 
-  let angle = -Math.PI / 2;
   const slices = [...data].sort((a, b) => b.totalTokens - a.totalTokens);
+  const total = slices.reduce((s, d) => s + d.totalTokens, 0);
+  const colors = slices.map(d => getColor(d.model));
 
-  slices.forEach(d => {
-    const sa = (d.totalTokens / total) * Math.PI * 2;
-    const [c1, c2] = getColors(d.model);
-    const grad = ctx.createConicGradient(angle, cx, cy);
-    grad.addColorStop(0, c1); grad.addColorStop(1, c2);
+  // Center text plugin
+  const centerTextPlugin = {
+    id: 'doughnutCenterText',
+    afterDraw(chart) {
+      const { ctx, chartArea: { left, right, top, bottom } } = chart;
+      const cx = (left + right) / 2;
+      const cy = (top + bottom) / 2;
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#0F172A';
+      ctx.font = "800 17px 'Inter', sans-serif";
+      ctx.fillText(fmt(total), cx, cy - 4);
+      ctx.fillStyle = '#94A3B8';
+      ctx.font = "500 10px 'Inter', sans-serif";
+      ctx.fillText('total', cx, cy + 14);
+      ctx.restore();
+    },
+  };
 
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, angle, angle + sa);
-    ctx.arc(cx, cy, innerR, angle + sa, angle, true);
-    ctx.closePath();
-    ctx.fillStyle = c1;
-    ctx.fill();
-
-    // Gap between slices
-    ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2; ctx.stroke();
-    angle += sa;
+  _chartInstances['modelChart'] = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: slices.map(d => modelShort(d.model)),
+      datasets: [{
+        data: slices.map(d => d.totalTokens),
+        backgroundColor: colors,
+        borderColor: '#FFFFFF',
+        borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      cutout: '60%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              const val = ctx.parsed;
+              const pct = ((val / total) * 100).toFixed(1);
+              return `${ctx.label}: ${fmt(val)} (${pct}%)`;
+            },
+          },
+        },
+      },
+    },
+    plugins: [centerTextPlugin],
   });
 
-  ctx.fillStyle = '#0F172A'; ctx.textAlign = 'center';
-  ctx.font = '800 17px Inter, system-ui';
-  ctx.fillText(fmt(total), cx, cy + 2);
-  ctx.font = '500 10px Inter, system-ui';
-  ctx.fillStyle = '#94A3B8';
-  ctx.fillText('total', cx, cy + 16);
-
+  // Render legend to the existing element
   document.getElementById('modelLegend').innerHTML = slices.map(d => {
     const pct = ((d.totalTokens / total) * 100).toFixed(1);
     return `<div class="legend-item">
-      <div class="legend-dot" style="background:${getColors(d.model)[0]}"></div>
+      <div class="legend-dot" style="background:${getColor(d.model)}"></div>
       <span><strong>${modelShort(d.model)}</strong> &ndash; ${fmt(d.totalTokens)} (${pct}%)</span>
     </div>`;
   }).join('');
@@ -1467,53 +1435,27 @@ function groupSessionQueries(queries) {
   return grouped;
 }
 
-// Per-turn cost area chart
+// Per-turn cost area chart (Chart.js)
 function renderTurnCostChart(grouped) {
   const wrap = document.getElementById('turnChartWrap');
   if (grouped.length < 6) { wrap.style.display = 'none'; return; }
   wrap.style.display = 'block';
 
   const canvas = document.getElementById('turnCostChart');
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  // Force reflow so clientWidth is accurate after display change
-  wrap.offsetHeight;
-  const w = canvas.parentElement.clientWidth || wrap.clientWidth || 600;
-  const h = 140;
-  canvas.width = w * dpr; canvas.height = h * dpr;
-  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, w, h);
+
+  if (_chartInstances['turnCostChart']) { _chartInstances['turnCostChart'].destroy(); }
 
   const costs = grouped.map(g => g.cost);
   const maxCost = Math.max(...costs);
   if (maxCost <= 0) { wrap.style.display = 'none'; return; }
 
-  const padL = 52, padR = 16, padT = 12, padB = 28;
-  const chartW = w - padL - padR;
-  const chartH = h - padT - padB;
+  const labels = costs.map((_, i) => i + 1);
 
-  // Grid lines
-  ctx.font = '500 10px Inter, system-ui';
-  ctx.fillStyle = '#94A3B8';
-  ctx.textAlign = 'right';
-  for (let i = 0; i <= 3; i++) {
-    const val = (maxCost / 3) * i;
-    const y = padT + chartH - (chartH * i / 3);
-    ctx.fillText('$' + val.toFixed(3), padL - 8, y + 3);
-    ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
-  }
-
-  const stepX = grouped.length > 1 ? chartW / (grouped.length - 1) : chartW;
-
-  // Find the most expensive turn — that's where /clear would have helped most.
-  // The line says "a /clear before this turn would have reduced its cost."
+  // Inflection detection (same logic as before)
   let inflectionIdx = -1;
   if (grouped.length >= 6) {
     const sorted = costs.map((c, i) => ({ c, i })).sort((a, b) => b.c - a.c);
     const topIdx = sorted[0].i;
-    // Only show if the top turn is at least 3x the median cost (i.e. it's actually a spike)
     const sortedCosts = [...costs].sort((a, b) => a - b);
     const median = sortedCosts[Math.floor(sortedCosts.length / 2)];
     if (topIdx > 0 && sorted[0].c > median * 3 && sorted[0].c > 0.01) {
@@ -1521,85 +1463,101 @@ function renderTurnCostChart(grouped) {
     }
   }
 
-  // Area gradient fill
-  const gradient = ctx.createLinearGradient(0, padT, 0, padT + chartH);
-  gradient.addColorStop(0, 'rgba(244,63,94,0.25)');
-  gradient.addColorStop(1, 'rgba(99,102,241,0.05)');
+  // Inflection annotation plugin
+  const inflectionPlugin = {
+    id: 'turnCostInflection',
+    afterDraw(chart) {
+      if (inflectionIdx < 0) return;
+      const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+      const xPos = x.getPixelForValue(inflectionIdx);
+      ctx.save();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = '#F59E0B';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(xPos, top);
+      ctx.lineTo(xPos, bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Label
+      ctx.fillStyle = '#F59E0B';
+      ctx.font = "600 10px 'Inter', sans-serif";
+      const labelText = '$' + costs[inflectionIdx].toFixed(2) + ' \u2014 most expensive';
+      const labelWidth = ctx.measureText(labelText).width;
+      if (xPos + labelWidth / 2 > chart.chartArea.right) {
+        ctx.textAlign = 'right';
+        ctx.fillText(labelText, xPos - 6, top - 4);
+      } else {
+        ctx.textAlign = 'left';
+        ctx.fillText(labelText, xPos + 6, top - 4);
+      }
+      ctx.restore();
+    },
+  };
 
-  ctx.beginPath();
-  costs.forEach((c, i) => {
-    const x = padL + i * stepX;
-    const y = padT + chartH - (c / maxCost) * chartH;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  _chartInstances['turnCostChart'] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Cost per turn',
+        data: costs,
+        borderColor: function(ctx) {
+          const chart = ctx.chart;
+          const { chartArea } = chart;
+          if (!chartArea) return '#6366F1';
+          const gradient = chart.ctx.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
+          gradient.addColorStop(0, '#6366F1');
+          gradient.addColorStop(1, '#F43F5E');
+          return gradient;
+        },
+        borderWidth: 2,
+        fill: true,
+        backgroundColor: function(ctx) {
+          const chart = ctx.chart;
+          const { chartArea } = chart;
+          if (!chartArea) return 'rgba(244,63,94,0.1)';
+          const gradient = chart.ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          gradient.addColorStop(0, 'rgba(244,63,94,0.25)');
+          gradient.addColorStop(1, 'rgba(99,102,241,0.05)');
+          return gradient;
+        },
+        pointRadius: 3,
+        pointBackgroundColor: costs.map((_, i) => {
+          const t = costs.length > 1 ? i / (costs.length - 1) : 0;
+          return t < 0.5 ? '#6366F1' : '#F43F5E';
+        }),
+        pointBorderWidth: 0,
+        tension: 0,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      layout: { padding: { top: 16 } },
+      scales: {
+        x: {
+          ticks: { color: '#94A3B8', font: { size: 10, weight: 500 }, autoSkip: true, maxTicksLimit: 9 },
+          grid: { display: false },
+        },
+        y: {
+          ticks: { color: '#94A3B8', font: { size: 10, weight: 500 }, callback: v => '$' + v.toFixed(3) },
+          grid: { color: 'rgba(0,0,0,0.04)' },
+          border: { display: false },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) { return '$' + ctx.parsed.y.toFixed(4); },
+            title: function(items) { return 'Turn ' + items[0].label; },
+          },
+        },
+      },
+    },
+    plugins: [inflectionPlugin],
   });
-  ctx.lineTo(padL + (costs.length - 1) * stepX, padT + chartH);
-  ctx.lineTo(padL, padT + chartH);
-  ctx.closePath();
-  ctx.fillStyle = gradient;
-  ctx.fill();
-
-  // Line
-  const lineGrad = ctx.createLinearGradient(padL, 0, padL + chartW, 0);
-  lineGrad.addColorStop(0, '#6366F1');
-  lineGrad.addColorStop(1, '#F43F5E');
-  ctx.beginPath();
-  costs.forEach((c, i) => {
-    const x = padL + i * stepX;
-    const y = padT + chartH - (c / maxCost) * chartH;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  });
-  ctx.strokeStyle = lineGrad;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Dots
-  costs.forEach((c, i) => {
-    const x = padL + i * stepX;
-    const y = padT + chartH - (c / maxCost) * chartH;
-    const t = costs.length > 1 ? i / (costs.length - 1) : 0;
-    ctx.beginPath();
-    ctx.arc(x, y, 3, 0, Math.PI * 2);
-    ctx.fillStyle = t < 0.5 ? '#6366F1' : '#F43F5E';
-    ctx.fill();
-  });
-
-  // Inflection line
-  if (inflectionIdx > 0) {
-    const ix = padL + inflectionIdx * stepX;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = '#F59E0B';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(ix, padT);
-    ctx.lineTo(ix, padT + chartH);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = '#F59E0B';
-    ctx.font = '600 10px Inter, system-ui';
-    // Position label: keep it inside chart bounds
-    const labelText = '$' + costs[inflectionIdx].toFixed(2) + ' \u2014 most expensive';
-    const labelWidth = ctx.measureText(labelText).width;
-    if (ix + labelWidth / 2 > w - padR) {
-      ctx.textAlign = 'right';
-      ctx.fillText(labelText, ix - 6, padT - 2);
-    } else {
-      ctx.textAlign = 'left';
-      ctx.fillText(labelText, ix + 6, padT - 2);
-    }
-  }
-
-  // X labels
-  ctx.fillStyle = '#94A3B8';
-  ctx.font = '500 10px Inter, system-ui';
-  ctx.textAlign = 'center';
-  const labelStep = Math.max(1, Math.floor(grouped.length / 8));
-  costs.forEach((_, i) => {
-    if (i % labelStep === 0 || i === costs.length - 1) {
-      const x = padL + i * stepX;
-      ctx.fillText(i + 1, x, padT + chartH + 16);
-    }
-  });
-
 }
 
 // Session insight/recommendation
@@ -1674,10 +1632,6 @@ function openDrilldown(sessionId) {
 
   const grouped = groupSessionQueries(session.queries);
 
-  // Reset chart canvas before rendering
-  const turnCanvas = document.getElementById('turnCostChart');
-  turnCanvas.width = 0; turnCanvas.height = 0;
-  turnCanvas.style.width = '0'; turnCanvas.style.height = '0';
   // Render per-turn cost chart
   renderTurnCostChart(grouped);
 

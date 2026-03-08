@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Spend - Admin</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #F8F9FC; --white: #FFFFFF; --text: #0F172A;
+    --text-secondary: #475569; --text-tertiary: #94A3B8;
+    --border: rgba(0,0,0,0.06); --border-strong: rgba(0,0,0,0.1);
+    --indigo: #6366F1; --violet: #8B5CF6; --rose: #F43F5E; --emerald: #10B981;
+    --amber: #F59E0B; --blue: #3B82F6; --teal: #14B8A6;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.06);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.08);
+    --radius: 16px; --radius-sm: 10px;
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; }
+  body::before {
+    content: ''; position: fixed; top: 0; left: 0; right: 0; height: 500px;
+    background: radial-gradient(ellipse 80% 60% at 10% 0%, rgba(99,102,241,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 90% 10%, rgba(139,92,246,0.06) 0%, transparent 50%);
+    pointer-events: none; z-index: 0;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 40px 28px 60px; position: relative; z-index: 1; }
+  h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 8px; }
+  h2 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; margin-bottom: 6px; }
+  .subtitle { color: var(--text-secondary); font-size: 14px; margin-bottom: 28px; }
+
+  /* Login */
+  .login-card { background: var(--white); border-radius: var(--radius); padding: 40px; border: 1px solid var(--border); box-shadow: var(--shadow-md); max-width: 400px; margin: 80px auto; text-align: center; position: relative; z-index: 1; }
+  .login-card h2 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+  .login-card input { width: 100%; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); font-size: 14px; font-family: var(--font); margin-bottom: 12px; outline: none; }
+  .login-card input:focus { border-color: var(--indigo); }
+  .login-card .error { color: var(--rose); font-size: 13px; margin-bottom: 8px; display: none; }
+
+  /* Buttons */
+  .btn { padding: 8px 18px; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 600; font-family: var(--font); transition: all 0.2s; border: none; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary { background: var(--indigo); color: white; }
+  .btn-primary:hover { box-shadow: 0 2px 8px rgba(99,102,241,0.3); }
+  .btn-danger { background: var(--rose); color: white; }
+  .btn-danger:hover { box-shadow: 0 2px 8px rgba(244,63,94,0.3); }
+  .btn-outline { background: var(--white); border: 1px solid var(--border); color: var(--text-secondary); }
+  .btn-outline:hover { border-color: var(--indigo); color: var(--indigo); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+  /* Tabs */
+  .admin-tabs { display: flex; gap: 4px; background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 28px; }
+  .admin-tab { padding: 8px 20px; border-radius: 9px; font-size: 13px; font-weight: 600; color: var(--text-secondary); cursor: pointer; transition: all 0.15s; border: none; background: none; font-family: var(--font); }
+  .admin-tab:hover { color: var(--text); }
+  .admin-tab.active { background: var(--indigo); color: white; box-shadow: 0 2px 8px rgba(99,102,241,0.25); }
+
+  /* Card / Table */
+  .card { background: var(--white); border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow-sm); overflow: hidden; margin-bottom: 24px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-tertiary); border-bottom: 1px solid var(--border); background: #FAFBFC; white-space: nowrap; cursor: pointer; user-select: none; }
+  th:hover { color: var(--text-secondary); }
+  th.sorted { color: var(--indigo); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  .key-cell { font-family: var(--mono); font-size: 11px; color: var(--text-secondary); letter-spacing: 0.3px; }
+  .key-hidden { filter: blur(4px); transition: filter 0.2s; cursor: pointer; }
+  .key-hidden:hover { filter: blur(0); }
+
+  /* Add form */
+  .add-form { display: flex; gap: 10px; padding: 16px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .add-form input { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border-strong); font-size: 13px; font-family: var(--font); outline: none; flex: 1; min-width: 150px; }
+  .add-form input:focus { border-color: var(--indigo); }
+
+  .actions { display: flex; gap: 6px; }
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--text); color: white; padding: 12px 20px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; }
+  .toast.show { opacity: 1; }
+  .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 13px; font-weight: 500; text-decoration: none; margin-bottom: 20px; }
+  .back-link:hover { color: var(--indigo); }
+
+  /* Performance Review */
+  .perf-section { display: none; }
+  .perf-section.active { display: block; }
+  .keys-section { display: none; }
+  .keys-section.active { display: block; }
+
+  /* Date filter bar */
+  .date-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  .preset { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--white); color: var(--text-secondary); transition: all 0.15s; font-family: var(--font); }
+  .preset:hover { border-color: var(--indigo); color: var(--indigo); }
+  .preset.active { background: var(--indigo); color: white; border-color: var(--indigo); }
+
+  /* KPI Summary Cards */
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  @media (max-width: 800px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+  .kpi-card { background: var(--white); border-radius: var(--radius); padding: 18px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
+  .kpi-label { font-size: 11px; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .kpi-value { font-size: 26px; font-weight: 800; letter-spacing: -1px; line-height: 1; margin-bottom: 4px; }
+  .kpi-sub { font-size: 12px; color: var(--text-tertiary); font-weight: 500; }
+
+  /* Grade badge */
+  .grade { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; font-size: 14px; font-weight: 800; letter-spacing: -0.5px; }
+  .grade-a { background: linear-gradient(135deg, #ECFDF5, #D1FAE5); color: #059669; }
+  .grade-b { background: linear-gradient(135deg, #EFF6FF, #DBEAFE); color: #2563EB; }
+  .grade-c { background: linear-gradient(135deg, #FFFBEB, #FEF3C7); color: #D97706; }
+  .grade-d { background: linear-gradient(135deg, #FFF1F2, #FECDD3); color: #E11D48; }
+  .grade-f { background: linear-gradient(135deg, #FEF2F2, #FECACA); color: #DC2626; }
+
+  /* Metric bar */
+  .metric-bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+  .metric-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+
+  /* Dev detail modal */
+  .dev-detail { background: var(--white); border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow-lg); padding: 28px; margin-bottom: 24px; }
+  .dev-detail h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+  .detail-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+  @media (max-width: 700px) { .detail-grid { grid-template-columns: repeat(2, 1fr); } }
+  .detail-metric { padding: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+  .detail-metric-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-tertiary); margin-bottom: 4px; }
+  .detail-metric-value { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; }
+  .detail-metric-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 3px; }
+
+  /* Radar chart */
+  .radar-wrap { display: flex; justify-content: center; margin: 16px 0; }
+
+  /* Signal row */
+  .signal-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  @media (max-width: 700px) { .signal-grid { grid-template-columns: repeat(2, 1fr); } }
+  .signal-card { padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+  .signal-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-tertiary); margin-bottom: 6px; }
+  .signal-value { font-size: 16px; font-weight: 800; margin-bottom: 4px; }
+  .signal-bar-track { height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; }
+  .signal-bar-fill { height: 100%; border-radius: 3px; }
+
+  /* Review notes */
+  .review-notes { margin-top: 16px; padding: 14px; border-radius: var(--radius-sm); background: #FAFBFC; border: 1px solid var(--border); }
+  .review-notes h4 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-tertiary); margin-bottom: 8px; }
+  .review-notes ul { list-style: none; }
+  .review-notes li { font-size: 13px; color: var(--text-secondary); padding: 3px 0; display: flex; align-items: flex-start; gap: 6px; }
+  .review-notes li::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-top: 7px; flex-shrink: 0; }
+  .note-positive::before { background: var(--emerald); }
+  .note-neutral::before { background: var(--amber); }
+  .note-negative::before { background: var(--rose); }
+
+  .export-bar { display: flex; justify-content: flex-end; margin-bottom: 16px; gap: 8px; }
+
+  .num { font-family: var(--mono); font-size: 12px; text-align: right; }
+  .dev-link { cursor: pointer; font-weight: 600; }
+  .dev-link:hover { color: var(--indigo); text-decoration: underline; }
+
+  /* AI Review */
+  .ai-review { margin-top: 20px; padding: 20px; border-radius: var(--radius-sm); border: 1px solid rgba(99,102,241,0.2); background: linear-gradient(135deg, #F5F3FF, #EEF2FF); }
+  .ai-review h4 { font-size: 13px; font-weight: 700; color: var(--indigo); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .ai-review-summary { font-size: 14px; font-weight: 500; color: var(--text); line-height: 1.6; margin-bottom: 14px; }
+  .ai-review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  @media (max-width: 700px) { .ai-review-grid { grid-template-columns: 1fr; } }
+  .ai-review-list { padding: 12px; border-radius: 8px; background: var(--white); border: 1px solid var(--border); }
+  .ai-review-list h5 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-tertiary); margin-bottom: 8px; }
+  .ai-review-list li { font-size: 12px; color: var(--text-secondary); padding: 2px 0; list-style: disc; margin-left: 16px; }
+  .ai-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .ai-badge { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; border: 1px solid var(--border); background: var(--white); }
+  .btn-ai { background: linear-gradient(135deg, var(--indigo), var(--violet)); color: white; border: none; }
+  .btn-ai:hover { box-shadow: 0 2px 12px rgba(99,102,241,0.4); }
+  .btn-ai:disabled { opacity: 0.5; cursor: not-allowed; }
+  .ai-loading { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--indigo); font-weight: 500; }
+  .ai-spinner { width: 14px; height: 14px; border: 2px solid rgba(99,102,241,0.2); border-top-color: var(--indigo); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div id="loginView" class="login-card">
+  <h2>Admin Login</h2>
+  <p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px">Enter the admin password to access admin panel</p>
+  <div class="error" id="loginError">Invalid password</div>
+  <input type="password" id="passInput" placeholder="Admin password" onkeydown="if(event.key==='Enter')doLogin()">
+  <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="doLogin()">Sign In</button>
+</div>
+
+<div id="adminView" class="container" style="display:none">
+  <a href="/" class="back-link">&larr; Back to Dashboard</a>
+  <h1>Admin Panel</h1>
+  <p class="subtitle">Manage API keys and review developer AI performance.</p>
+
+  <div class="admin-tabs">
+    <button class="admin-tab active" onclick="switchTab('keys')">API Keys</button>
+    <button class="admin-tab" onclick="switchTab('perf')">Performance Review</button>
+  </div>
+
+  <!-- Keys Section -->
+  <div id="keysSection" class="keys-section active">
+    <div class="card">
+      <table>
+        <thead><tr><th>Developer</th><th>Name</th><th>Email</th><th>Timezone</th><th>API Key</th><th>Actions</th></tr></thead>
+        <tbody id="keysBody"></tbody>
+      </table>
+      <div class="add-form">
+        <input type="text" id="addName" placeholder="Full Name (e.g. John Smith)">
+        <input type="email" id="addEmail" placeholder="Email">
+        <button class="btn btn-primary btn-sm" onclick="addDev()">+ Add Developer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Performance Review Section -->
+  <div id="perfSection" class="perf-section">
+    <div class="date-bar" id="perfDateBar"></div>
+    <div id="perfSummary"></div>
+    <div id="perfDetail"></div>
+    <div id="perfTable"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let adminPass = '';
+let PERF_DATA = null;
+let WOW_DATA = null;
+let PROMPT_QUALITY_DATA = {};
+let perfRange = '30d';
+let perfSort = { key: 'healthScore', dir: 'desc' };
+let expandedDev = null;
+let AI_CONFIGURED = false;
+const aiReviews = {}; // cache: devId -> review
+
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function headers() {
+  return { 'Authorization': 'Bearer ' + adminPass, 'Content-Type': 'application/json' };
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function fmt(n) {
+  if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+  return String(Math.round(n));
+}
+function fmtCost(c) { return '$' + (c||0).toFixed(2); }
+function fmtPct(n) { return (n||0).toFixed(1) + '%'; }
+function fmtFull(n) { return Number(n||0).toLocaleString(); }
+
+// --- Auth ---
+async function doLogin() {
+  const pass = document.getElementById('passInput').value;
+  if (!pass) return;
+  adminPass = pass;
+  try {
+    const res = await fetch('/api/team/admin/keys', { headers: headers() });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      document.getElementById('loginError').textContent = j.error || 'Login failed';
+      document.getElementById('loginError').style.display = 'block';
+      adminPass = '';
+      return;
+    }
+    document.getElementById('loginView').style.display = 'none';
+    document.getElementById('adminView').style.display = 'block';
+    loadKeys();
+    // Check AI review availability
+    try { const aiRes = await fetch('/api/team/admin/ai-status', { headers: headers() }); const aiData = await aiRes.json(); AI_CONFIGURED = !!aiData.configured; } catch {}
+  } catch (e) {
+    document.getElementById('loginError').textContent = e.message;
+    document.getElementById('loginError').style.display = 'block';
+  }
+}
+
+// --- Tabs ---
+function switchTab(tab) {
+  document.querySelectorAll('.admin-tab').forEach((t, i) => {
+    t.classList.toggle('active', (tab === 'keys' && i === 0) || (tab === 'perf' && i === 1));
+  });
+  document.getElementById('keysSection').classList.toggle('active', tab === 'keys');
+  document.getElementById('perfSection').classList.toggle('active', tab === 'perf');
+  if (tab === 'perf' && !PERF_DATA) loadPerfData();
+}
+
+// --- Keys Section ---
+async function loadKeys() {
+  const res = await fetch('/api/team/admin/keys', { headers: headers() });
+  const data = await res.json();
+  const keys = data.keys || [];
+  document.getElementById('keysBody').innerHTML = keys.map(u => `
+    <tr>
+      <td style="font-weight:600">${esc(u.devId)}</td>
+      <td>${esc(u.name)}</td>
+      <td style="color:var(--text-secondary)">${esc(u.email)}</td>
+      <td style="color:var(--text-secondary);font-size:12px" title="${u.timezone ? esc(u.timezone) : 'Not yet detected — will auto-detect on next sync'}">${u.timezone ? esc(u.timezone.split('/').pop().replace(/_/g, ' ')) : '<span style="color:var(--text-tertiary)">—</span>'}</td>
+      <td class="key-cell"><span class="key-hidden" title="Hover to reveal">${esc(u.key)}</span></td>
+      <td class="actions">
+        <button class="btn btn-outline btn-sm" onclick="copyKey('${esc(u.key)}')">Copy</button>
+        <button class="btn btn-outline btn-sm" onclick="rotateKey('${esc(u.devId)}')">Rotate</button>
+        <button class="btn btn-danger btn-sm" onclick="removeDev('${esc(u.devId)}')">Remove</button>
+      </td>
+    </tr>
+  `).join('');
+}
+function copyKey(key) { navigator.clipboard.writeText(key).then(() => toast('Key copied to clipboard')); }
+async function rotateKey(devId) {
+  if (!confirm('Rotate key for ' + devId + '? They will need the new key to sync.')) return;
+  const res = await fetch('/api/team/admin/rotate', { method: 'POST', headers: headers(), body: JSON.stringify({ devId }) });
+  const data = await res.json();
+  if (data.ok) { toast('Key rotated for ' + devId); loadKeys(); }
+  else toast('Error: ' + (data.error || 'Unknown'));
+}
+async function removeDev(devId) {
+  const pwd = prompt('To remove ' + devId + ', enter the admin password:');
+  if (pwd === null) return;
+  if (!pwd.trim()) { toast('Password required to remove a user'); return; }
+  const res = await fetch('/api/team/admin/remove', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': pwd.trim() }, body: JSON.stringify({ devId }) });
+  const data = await res.json();
+  if (data.ok) { toast('Removed ' + devId); loadKeys(); }
+  else toast('Error: ' + (data.error || 'Unknown'));
+}
+async function addDev() {
+  const name = document.getElementById('addName').value.trim();
+  const email = document.getElementById('addEmail').value.trim();
+  if (!name || !email) return toast('Name and email are required');
+  const res = await fetch('/api/team/admin/add', { method: 'POST', headers: headers(), body: JSON.stringify({ name, email }) });
+  const data = await res.json();
+  if (data.ok) { toast('Added ' + data.devId); document.getElementById('addName').value = ''; document.getElementById('addEmail').value = ''; loadKeys(); }
+  else toast('Error: ' + (data.error || 'Unknown'));
+}
+
+// ============================
+// Performance Review Section
+// ============================
+
+function getDateParams() {
+  if (perfRange === 'all') return '';
+  const days = { '7d': 7, '30d': 30, '90d': 90 }[perfRange] || 30;
+  const from = new Date(); from.setDate(from.getDate() - days);
+  const to = new Date();
+  return `from=${from.toISOString().split('T')[0]}&to=${to.toISOString().split('T')[0]}`;
+}
+
+async function loadPerfData() {
+  const dp = getDateParams();
+  const q = dp ? '?' + dp : '';
+  try {
+    const [prodRes, wowRes] = await Promise.all([
+      fetch('/api/team/productivity' + q),
+      fetch('/api/team/wow'),
+    ]);
+    PERF_DATA = await prodRes.json();
+    WOW_DATA = await wowRes.json();
+    renderPerf();
+    // Fetch prompt quality scores async (Gemini, may be slow) — re-render when ready
+    fetch('/api/team/prompt-quality' + q).then(r => r.json()).then(d => {
+      if (d.scores) { PROMPT_QUALITY_DATA = d.scores; renderPerf(); }
+    }).catch(() => {});
+  } catch (e) {
+    document.getElementById('perfSummary').innerHTML = `<div class="card" style="padding:24px;text-align:center;color:var(--rose)">Failed to load: ${esc(e.message)}</div>`;
+  }
+}
+
+function setPerfRange(r) { perfRange = r; loadPerfData(); }
+
+// --- Health Score: team-relative raw scoring + Gaussian normalization for grades ---
+// Raw: score each metric as % of team max (top performer = 100 on each dimension)
+// Gaussian: z-score the raw scores, map top → 90, mean → 50 for bell-curve grades
+
+function computeAllHealth(allDevs) {
+  if (!allDevs || allDevs.length === 0) return;
+  // Filter out inactive/minimal devs for benchmarks (need meaningful usage)
+  const active = allDevs.filter(d => (d.sessions || 0) > 0 && (d.queries || 0) >= 50);
+  const bench = active.length > 0 ? active : allDevs.filter(d => (d.sessions || 0) > 0);
+  if (bench.length === 0) { allDevs.forEach(d => { d.rawHealth = 0; d.healthScore = 0; d.gradeInfo = grade(0); }); return; }
+
+  // Find team max from active devs only (benchmarks derived from actual team)
+  const maxQ       = Math.max(...bench.map(d => d.avgQueriesPerSession || 0)) || 1;
+  const maxToolAct = Math.max(...bench.map(d => d.toolActivationRate || 0)) || 1;
+  const maxToolDiv = Math.max(...bench.map(d => d.uniqueTools || 0)) || 1;
+  const maxCache   = Math.max(...bench.map(d => d.cacheHitRate || 0)) || 1;
+  const maxSess    = Math.max(...bench.map(d => d.sessions || 0)) || 1;
+  const maxDays    = Math.max(...bench.map(d => d.activeDays || 0)) || 1;
+
+  // Raw score: weighted % of team max (0-100, top performer near 100)
+  function rawScore(d) {
+    const qDepth   = ((d.avgQueriesPerSession || 0) / maxQ) * 100;
+    const toolAct  = ((d.toolActivationRate || 0) / maxToolAct) * 100;
+    const toolDiv  = ((d.uniqueTools || 0) / maxToolDiv) * 100;
+    const cache    = ((d.cacheHitRate || 0) / maxCache) * 100;
+    const sessions = ((d.sessions || 0) / maxSess) * 100;
+    const consist  = ((d.activeDays || 0) / maxDays) * 100;
+    return qDepth * 0.2 + toolAct * 0.15 + toolDiv * 0.1 + cache * 0.15 + sessions * 0.25 + consist * 0.15;
+  }
+
+  const rawScores = allDevs.map(rawScore);
+
+  // Gaussian normalization for grades — only use active devs for mean/stddev
+  // so inactive devs don't drag down the baseline
+  const activeIndices = allDevs.map((d, i) => (d.sessions || 0) > 0 ? i : -1).filter(i => i >= 0);
+  const activeRawScores = activeIndices.map(i => rawScores[i]);
+  const mean = activeRawScores.length > 0 ? activeRawScores.reduce((a, b) => a + b, 0) / activeRawScores.length : 0;
+  const stdDev = (activeRawScores.length > 1 ? Math.sqrt(activeRawScores.reduce((s, v) => s + (v - mean) ** 2, 0) / activeRawScores.length) : 1) || 1;
+  const SPREAD = 20; // 1 stddev = 20 grade points
+
+  allDevs.forEach((d, i) => {
+    d.rawHealth = Math.round(rawScores[i] * 10) / 10;
+    const z = (rawScores[i] - mean) / stdDev;
+    d.healthScore = Math.round(Math.max(0, Math.min(100, 50 + z * SPREAD)) * 10) / 10;
+    d.gradeInfo = grade(d.healthScore);
+  });
+}
+
+function computeROISignals(d, allDevs, rangeDays) {
+  rangeDays = rangeDays || 30;
+
+  // Build Ratio: Edit+Write vs Read+Grep+Glob — writing code, not just reading
+  const tools = {};
+  (d.topTools || []).forEach(t => { tools[t.tool] = t.count; });
+  const buildCalls = (tools.Edit || 0) + (tools.Write || 0);
+  const browseCalls = (tools.Read || 0) + (tools.Grep || 0) + (tools.Glob || 0);
+  const buildRatio = (buildCalls + browseCalls) > 0 ? Math.round(buildCalls / (buildCalls + browseCalls) * 100) : 0;
+
+  // Change Verification Rate: when AI edits code, do they run tests/lint? (server-computed)
+  const changeVerification = d.changeVerificationRate || 0;
+
+  // Prompt Quality: AI-scored via Gemini (async, may not be loaded yet)
+  const pq = PROMPT_QUALITY_DATA[d.devId];
+  const promptQuality = pq ? pq.score : null;
+
+  return {
+    queryDepth: Math.min(100, Math.round((d.avgQueriesPerSession / 10) * 100)),
+    toolActivation: d.toolActivationRate,
+    promptQuality,
+    consistency: Math.min(100, Math.round((d.activeDays / rangeDays) * 100)),
+    buildRatio,
+    changeVerification,
+  };
+}
+
+// Dynamic Gaussian: mean=50, top=90. Grades at standard deviation boundaries.
+// ~16% get A (>70), ~34% get B (50-70), ~34% get C (30-50), ~13% get D (10-30), ~3% get F (<10)
+function grade(score) {
+  if (score >= 70) return { letter: 'A', cls: 'grade-a' };
+  if (score >= 50) return { letter: 'B', cls: 'grade-b' };
+  if (score >= 30) return { letter: 'C', cls: 'grade-c' };
+  if (score >= 10) return { letter: 'D', cls: 'grade-d' };
+  return { letter: 'F', cls: 'grade-f' };
+}
+
+function signalColor(pct) {
+  if (pct >= 70) return 'var(--emerald)';
+  if (pct >= 40) return 'var(--amber)';
+  return 'var(--rose)';
+}
+
+// --- Generate review notes (auto-insights for performance review) ---
+function generateNotes(d, roi, health) {
+  const notes = [];
+  // Positive signals
+  if (health >= 70) notes.push({ type: 'positive', text: `Strong overall AI health score (${Math.round(health)}/100) — well-rounded usage across all dimensions.` });
+  if (d.streak >= 10) notes.push({ type: 'positive', text: `${d.streak}-day active streak — consistent daily AI integration into workflow.` });
+  if (d.cacheHitRate >= 30) notes.push({ type: 'positive', text: `High cache hit rate (${fmtPct(d.cacheHitRate)}) — efficient context reuse reducing costs.` });
+  if (d.toolActivationRate >= 80) notes.push({ type: 'positive', text: `High tool activation (${d.toolActivationRate}%) — using AI for code edits, not just Q&A.` });
+  if (d.avgQueriesPerSession >= 8) notes.push({ type: 'positive', text: `Deep session engagement (${d.avgQueriesPerSession} queries/session) — sustained multi-turn workflows.` });
+  if (d.uniqueTools >= 8) notes.push({ type: 'positive', text: `Broad tool adoption (${d.uniqueTools} unique tools) — leveraging full AI capability.` });
+
+  // Neutral / areas to watch
+  if (d.trend > 30) notes.push({ type: 'neutral', text: `Usage trending up ${d.trend}% — growing adoption. Monitor for quality vs. volume.` });
+  if (d.trend < -30) notes.push({ type: 'neutral', text: `Usage trending down ${Math.abs(d.trend)}% — investigate if this reflects less need or potential blockers.` });
+  const modelCount = Object.keys(d.modelUsage || {}).length;
+  if (modelCount > 4) notes.push({ type: 'neutral', text: `Using ${modelCount} different models — consider standardizing to reduce context switching.` });
+
+  // Areas for improvement
+  if (health < 40 && d.sessions > 0) notes.push({ type: 'negative', text: `Low health score (${Math.round(health)}/100) — opportunity to improve AI workflow effectiveness.` });
+  if (d.sessions > 0 && d.toolActivationRate < 30) notes.push({ type: 'negative', text: `Low tool activation (${d.toolActivationRate}%) — primarily using AI for conversation, not code actions.` });
+  if (d.sessions > 0 && d.avgQueriesPerSession < 3) notes.push({ type: 'negative', text: `Shallow sessions (${d.avgQueriesPerSession} queries avg) — may indicate abandoning conversations early.` });
+  if (d.sessions > 0 && d.cacheHitRate < 5) notes.push({ type: 'negative', text: `Very low cache rate (${fmtPct(d.cacheHitRate)}) — not leveraging context reuse. Consider longer sessions.` });
+  if (d.activeDays < 3 && d.sessions > 0) notes.push({ type: 'negative', text: `Only ${d.activeDays} active days — sporadic usage. Encourage daily integration.` });
+  if (d.sessions === 0) notes.push({ type: 'negative', text: `No recorded sessions in this period — not using Claude Code.` });
+
+  return notes;
+}
+
+// --- Render ---
+function renderPerf() {
+  if (!PERF_DATA) return;
+
+  // Date bar
+  const presets = [{ k: '7d', l: '7 Days' }, { k: '30d', l: '30 Days' }, { k: '90d', l: '90 Days' }, { k: 'all', l: 'All Time' }];
+  document.getElementById('perfDateBar').innerHTML = presets.map(p =>
+    `<button class="preset ${perfRange === p.k ? 'active' : ''}" onclick="setPerfRange('${p.k}')">${p.l}</button>`
+  ).join('');
+
+  const devs = (PERF_DATA.developers || []).filter(d => d.sessions > 0);
+  const team = PERF_DATA.team || {};
+
+  // Compute health for each dev
+  computeAllHealth(devs);
+
+  // Team KPI: use raw health (% of team max) — not Gaussian-normalized
+  const avgHealth = devs.length > 0 ? devs.reduce((s, d) => s + d.rawHealth, 0) / devs.length : 0;
+  const avgDepth = devs.length > 0 ? devs.reduce((s, d) => s + d.avgQueriesPerSession, 0) / devs.length : 0;
+  const avgTool = devs.length > 0 ? devs.reduce((s, d) => s + d.toolActivationRate, 0) / devs.length : 0;
+  const avgCache = devs.length > 0 ? devs.reduce((s, d) => s + d.cacheHitRate, 0) / devs.length : 0;
+  const topPerformers = devs.filter(d => d.healthScore >= 70).length;
+  const needsAttention = devs.filter(d => d.healthScore < 40 && d.sessions > 0).length;
+
+  document.getElementById('perfSummary').innerHTML = `
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Team Health Score</div>
+        <div class="kpi-value" style="color:${signalColor(avgHealth)}">${Math.round(avgHealth)}</div>
+        <div class="kpi-sub">out of 100 &middot; ${topPerformers} top performers</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avg Session Depth</div>
+        <div class="kpi-value">${avgDepth.toFixed(1)}</div>
+        <div class="kpi-sub">queries per session</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avg Tool Activation</div>
+        <div class="kpi-value">${Math.round(avgTool)}%</div>
+        <div class="kpi-sub">sessions with code actions</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Active Developers</div>
+        <div class="kpi-value">${devs.length}</div>
+        <div class="kpi-sub">${needsAttention > 0 ? needsAttention + ' need attention' : 'all performing well'}</div>
+      </div>
+    </div>
+  `;
+
+  // Dev detail if expanded
+  if (expandedDev) {
+    const d = devs.find(x => x.devId === expandedDev);
+    if (d) renderDevDetail(d, devs);
+    else document.getElementById('perfDetail').innerHTML = '';
+  } else {
+    document.getElementById('perfDetail').innerHTML = '';
+  }
+
+  // Sort devs
+  const sk = perfSort.key;
+  const sd = perfSort.dir === 'asc' ? 1 : -1;
+  devs.sort((a, b) => {
+    if (sk === 'devId') return sd * String(a.devId).localeCompare(String(b.devId));
+    return sd * ((a[sk] || 0) - (b[sk] || 0));
+  });
+
+  const sortTh = (label, key, align) => {
+    const active = perfSort.key === key;
+    const arrow = active ? (perfSort.dir === 'desc' ? ' &#9660;' : ' &#9650;') : '';
+    return `<th style="${align ? 'text-align:right;' : ''}" class="${active ? 'sorted' : ''}" onclick="sortPerf('${key}')">${label}${arrow}</th>`;
+  };
+
+  // Export button
+  const exportBar = `<div class="export-bar">
+    <button class="btn btn-outline btn-sm" onclick="exportPerfCSV()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export Review CSV</button>
+  </div>`;
+
+  document.getElementById('perfTable').innerHTML = `
+    ${exportBar}
+    <div class="card"><table>
+      <thead><tr>
+        ${sortTh('Developer', 'devId', false)}
+        <th style="width:42px">Grade</th>
+        ${sortTh('Health', 'healthScore', true)}
+        ${sortTh('Sessions', 'sessions', true)}
+        ${sortTh('Queries', 'queries', true)}
+        ${sortTh('Depth', 'avgQueriesPerSession', true)}
+        ${sortTh('Tool Use', 'toolActivationRate', true)}
+        ${sortTh('Cache', 'cacheHitRate', true)}
+        ${sortTh('Streak', 'streak', true)}
+        ${sortTh('Trend', 'trend', true)}
+        ${sortTh('Cost', 'cost', true)}
+      </tr></thead>
+      <tbody>${devs.map(d => {
+        const g = d.gradeInfo;
+        const wow = WOW_DATA && WOW_DATA.devDeltas && WOW_DATA.devDeltas[d.devId];
+        const wowPct = wow ? wow.queries.pct : 0;
+        const trendColor = d.trend > 10 ? 'var(--emerald)' : d.trend < -10 ? 'var(--rose)' : 'var(--text-tertiary)';
+        const expanded = expandedDev === d.devId;
+        return `<tr onclick="toggleDevDetail('${esc(d.devId)}')" style="cursor:pointer;${expanded ? 'background:#F5F3FF;' : ''}">
+          <td class="dev-link" style="${expanded ? 'color:var(--indigo)' : ''}">${esc(d.devId)}</td>
+          <td><span class="grade ${g.cls}">${g.letter}</span></td>
+          <td class="num" style="font-weight:700">${Math.round(d.healthScore)}</td>
+          <td class="num">${fmtFull(d.sessions)}</td>
+          <td class="num">${fmtFull(d.queries)}</td>
+          <td class="num">${d.avgQueriesPerSession}</td>
+          <td class="num">${d.toolActivationRate}%</td>
+          <td class="num">${fmtPct(d.cacheHitRate)}</td>
+          <td class="num">${d.streak}d</td>
+          <td class="num" style="color:${trendColor}">${d.trend > 0 ? '+' : ''}${d.trend}%</td>
+          <td class="num">${fmtCost(d.cost)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>
+  `;
+}
+
+function sortPerf(key) {
+  if (perfSort.key === key) perfSort.dir = perfSort.dir === 'desc' ? 'asc' : 'desc';
+  else { perfSort.key = key; perfSort.dir = 'desc'; }
+  renderPerf();
+}
+
+function toggleDevDetail(devId) {
+  expandedDev = expandedDev === devId ? null : devId;
+  renderPerf();
+}
+
+function getRangeDays(dev) {
+  if (perfRange !== 'all') return { '1d': 1, '7d': 7, '30d': 30, '90d': 90 }[perfRange] || 30;
+  // "All Time": span from dev's first recorded data to today
+  const db = dev && dev.dailyBreakdown;
+  if (db && db.length > 0) {
+    const first = new Date(db[0].date || db[0]);
+    return Math.max(1, Math.ceil((Date.now() - first.getTime()) / 86400000) + 1);
+  }
+  return 365;
+}
+
+function renderDevDetail(d, allDevs) {
+  const health = d.healthScore;
+  const g = d.gradeInfo;
+  const roi = computeROISignals(d, allDevs, getRangeDays(d));
+  const notes = generateNotes(d, roi, health);
+  const wow = WOW_DATA && WOW_DATA.devDeltas && WOW_DATA.devDeltas[d.devId];
+
+  // Top projects
+  const projEntries = Object.entries(d.projectUsage || {}).sort((a, b) => b[1].tokens - a[1].tokens).slice(0, 8);
+  // Top tools
+  const topTools = (d.topTools || []).slice(0, 10);
+  // Models
+  const modelEntries = Object.entries(d.modelUsage || {}).sort((a, b) => b[1].tokens - a[1].tokens);
+
+  const SIGNAL_TIPS = {
+    'Query Depth': { low: 'Go deeper in sessions — iterate on the problem instead of starting new chats', high: 'Great session depth — sustained multi-turn problem solving' },
+    'Tool Activation': { low: 'Let Claude edit files and run commands, not just answer questions', high: 'Strong tool usage — using AI for real code actions' },
+    'Prompt Quality': { low: 'Write specific prompts: include file paths, expected behavior, and clear action verbs', high: 'Clear, specific prompts — setting AI up for success' },
+    'Consistency': { low: 'Use AI daily — make it part of your routine, not a once-in-a-while tool', high: 'Consistent daily usage — AI is embedded in the workflow' },
+    'Build Ratio': { low: 'Let AI write and edit code, not just read and search — trust it to make changes', high: 'Good build ratio — actively using AI to produce code' },
+    'Verification': { low: 'Run tests or lint after AI edits — add a Bash step to verify changes', high: 'Strong verification habit — validating AI output before moving on' },
+  };
+  const pqData = PROMPT_QUALITY_DATA[d.devId];
+
+  const signalBar = (label, pct, maxPct) => {
+    const tips = SIGNAL_TIPS[label] || {};
+    if (pct === null || pct === undefined) {
+      const tip = label === 'Prompt Quality' ? 'Analyzing prompts with AI... refresh shortly' : 'Not enough usage data to benchmark this metric';
+      return `<div class="signal-card" title="${tip}">
+        <div class="signal-label">${label}</div>
+        <div class="signal-value" style="color:var(--slate);cursor:help">${label === 'Prompt Quality' ? '...' : 'N/A'}</div>
+        <div class="signal-bar-track"><div class="signal-bar-fill" style="width:0%;background:var(--slate)"></div></div>
+      </div>`;
+    }
+    const p = Math.min(100, Math.max(0, pct));
+    const advice = label === 'Prompt Quality' && pqData && pqData.feedback
+      ? pqData.feedback
+      : (p < 50 ? tips.low : tips.high) || '';
+    return `<div class="signal-card" title="${advice}">
+      <div class="signal-label">${label}</div>
+      <div class="signal-value" style="color:${signalColor(p)}">${Math.round(p)}${maxPct ? '' : '%'}</div>
+      <div class="signal-bar-track"><div class="signal-bar-fill" style="width:${p}%;background:${signalColor(p)}"></div></div>
+      ${p < 50 ? `<div class="signal-tip" style="font-size:10px;color:var(--text-tertiary);margin-top:4px;line-height:1.3">${advice}</div>` : ''}
+    </div>`;
+  };
+
+  let wowHtml = '';
+  if (wow) {
+    const items = [
+      { l: 'Queries', curr: wow.queries.current, prev: wow.queries.previous, pct: wow.queries.pct },
+      { l: 'Sessions', curr: wow.sessions.current, prev: wow.sessions.previous, pct: wow.sessions.pct },
+      { l: 'Cost', curr: '$' + wow.cost.current, prev: '$' + wow.cost.previous, pct: wow.cost.pct },
+    ];
+    wowHtml = `<div style="margin-top:16px;padding:14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:#FAFBFC">
+      <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);margin-bottom:10px">Week-over-Week Change</h4>
+      <div style="display:flex;gap:24px;flex-wrap:wrap">${items.map(i => {
+        const color = i.pct > 0 ? 'var(--emerald)' : i.pct < 0 ? 'var(--rose)' : 'var(--text-tertiary)';
+        return `<div><span style="font-size:11px;color:var(--text-tertiary);font-weight:600">${i.l}</span><br>
+          <span style="font-size:15px;font-weight:700">${i.curr}</span>
+          <span style="font-size:12px;color:${color};margin-left:4px">${i.pct > 0 ? '+' : ''}${i.pct}%</span>
+          <span style="font-size:11px;color:var(--text-tertiary);margin-left:4px">vs ${i.prev}</span></div>`;
+      }).join('')}</div>
+    </div>`;
+  }
+
+  document.getElementById('perfDetail').innerHTML = `
+    <div class="dev-detail">
+      <h3>
+        <span class="grade ${g.cls}" style="width:36px;height:36px;font-size:16px">${g.letter}</span>
+        ${esc(d.devId)} &mdash; Performance Review
+        <span style="margin-left:auto;font-size:14px;font-weight:600;color:${signalColor(health)}">${Math.round(health)}/100</span>
+      </h3>
+
+      <div class="detail-grid">
+        <div class="detail-metric">
+          <div class="detail-metric-label">Total Sessions</div>
+          <div class="detail-metric-value">${fmtFull(d.sessions)}</div>
+          <div class="detail-metric-sub">${d.activeDays} active days</div>
+        </div>
+        <div class="detail-metric">
+          <div class="detail-metric-label">Total Queries</div>
+          <div class="detail-metric-value">${fmtFull(d.queries)}</div>
+          <div class="detail-metric-sub">${d.avgQueriesPerSession} avg per session</div>
+        </div>
+        <div class="detail-metric">
+          <div class="detail-metric-label">Total Cost</div>
+          <div class="detail-metric-value">${fmtCost(d.cost)}</div>
+          <div class="detail-metric-sub">${d.queries > 0 ? '$' + (d.cost / d.queries).toFixed(3) + '/query' : '-'}</div>
+        </div>
+        <div class="detail-metric">
+          <div class="detail-metric-label">Tokens Used</div>
+          <div class="detail-metric-value">${fmt(d.totalTokens)}</div>
+          <div class="detail-metric-sub">${fmtPct(d.outputRatio)} output ratio</div>
+        </div>
+        <div class="detail-metric">
+          <div class="detail-metric-label">Active Streak</div>
+          <div class="detail-metric-value">${d.streak} days</div>
+          <div class="detail-metric-sub">trend ${d.trend > 0 ? '+' : ''}${d.trend}%</div>
+        </div>
+        <div class="detail-metric">
+          <div class="detail-metric-label">Unique Tools</div>
+          <div class="detail-metric-value">${d.uniqueTools}</div>
+          <div class="detail-metric-sub">${d.toolActivationRate}% activation rate</div>
+        </div>
+      </div>
+
+      <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);margin-bottom:10px">ROI Signals</h4>
+      <div class="signal-grid">
+        ${signalBar('Query Depth', roi.queryDepth)}
+        ${signalBar('Tool Activation', roi.toolActivation)}
+        ${signalBar('Prompt Quality', roi.promptQuality)}
+        ${signalBar('Consistency', roi.consistency)}
+        ${signalBar('Build Ratio', roi.buildRatio)}
+        ${signalBar('Verification', roi.changeVerification)}
+      </div>
+
+      ${wowHtml}
+
+      <div style="margin-top:16px;display:grid;grid-template-columns:2fr 1fr;gap:16px">
+        <div style="padding:14px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+          <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);margin-bottom:10px">Daily Activity Pattern</h4>
+          <div style="height:160px;position:relative"><canvas id="hourlyChart_${esc(d.devId)}"></canvas></div>
+        </div>
+        <div style="padding:14px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+          <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);margin-bottom:10px">Model Usage</h4>
+          <div style="height:160px;position:relative"><canvas id="modelChart_${esc(d.devId)}"></canvas></div>
+        </div>
+      </div>
+
+      ${projEntries.length ? `
+        <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div style="padding:14px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+            <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);margin-bottom:8px">Top Projects</h4>
+            ${projEntries.map(([p, v]) => `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span style="font-weight:600">${esc(p.split(/[-/]/).pop() || p)}</span><span style="color:var(--text-tertiary);font-family:var(--mono)">${fmtFull(v.sessions)} sess &middot; ${fmtCost(v.cost)}</span></div>`).join('')}
+          </div>
+          <div style="padding:14px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+            <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);margin-bottom:8px">Top Tools</h4>
+            ${topTools.map(t => `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span style="font-weight:600">${esc(t.tool)}</span><span style="color:var(--text-tertiary);font-family:var(--mono)">${fmtFull(t.count)}</span></div>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      ${notes.length ? `
+        <div class="review-notes">
+          <h4>Review Notes (Auto-Generated)</h4>
+          <ul>${notes.map(n => `<li class="note-${n.type}">${esc(n.text)}</li>`).join('')}</ul>
+        </div>
+      ` : ''}
+
+      <div id="aiReviewSection_${esc(d.devId)}" style="margin-top:16px">
+        ${renderAIReview(d.devId)}
+      </div>
+    </div>
+  `;
+
+  // Render Chart.js charts after DOM update
+  setTimeout(() => { renderDevCharts(d); }, 0);
+}
+
+const _devCharts = {};
+function modelShort(m) {
+  const p = m.match(/claude-(opus|sonnet|haiku)-(\d+)(?:-(\d+))?/);
+  if (!p) return m.split('-').slice(0, 2).join('-');
+  const fam = p[1][0].toUpperCase() + p[1].slice(1);
+  const ver = p[3] ? p[2] + '.' + p[3] : p[2];
+  return fam + ' ' + ver;
+}
+function modelColor(m) {
+  if (m.includes('opus')) return '#6366F1';
+  if (m.includes('sonnet')) return '#10B981';
+  if (m.includes('haiku')) return '#F59E0B';
+  return '#94A3B8';
+}
+
+function renderDevCharts(d) {
+  // Destroy old charts
+  Object.values(_devCharts).forEach(c => c.destroy());
+  for (const k in _devCharts) delete _devCharts[k];
+
+  const font = { family: "'Inter', sans-serif" };
+
+  // --- Hourly Activity Bar Chart ---
+  const hCanvas = document.getElementById('hourlyChart_' + d.devId);
+  if (hCanvas) {
+    const hb = d.hourlyBreakdown || new Array(24).fill(0);
+    const totalH = hb.reduce((a, b) => a + b, 0);
+    const peakH = hb.indexOf(Math.max(...hb));
+    _devCharts.hourly = new Chart(hCanvas, {
+      type: 'bar',
+      data: {
+        labels: Array.from({ length: 24 }, (_, i) => i + ':00'),
+        datasets: [{
+          data: hb,
+          backgroundColor: hb.map((c, i) => c === 0 ? 'rgba(0,0,0,0.04)' : i === peakH ? '#6366F1' : 'rgba(99,102,241,0.35)'),
+          borderRadius: 3,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#0F172A', titleFont: font, bodyFont: font, padding: 10, cornerRadius: 8,
+            callbacks: { title: (items) => items[0].label, label: (item) => item.raw + ' sessions' + (totalH > 0 ? ' (' + Math.round(item.raw / totalH * 100) + '%)' : '') }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { ...font, size: 9 }, color: '#94A3B8', maxRotation: 0, callback: (v, i) => i % 3 === 0 ? i + 'h' : '' } },
+          y: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { ...font, size: 10 }, color: '#94A3B8', precision: 0 }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  // --- Model Usage Doughnut Chart ---
+  const mCanvas = document.getElementById('modelChart_' + d.devId);
+  if (mCanvas) {
+    const entries = Object.entries(d.modelUsage || {}).sort((a, b) => b[1].cost - a[1].cost);
+    if (entries.length > 0) {
+      _devCharts.model = new Chart(mCanvas, {
+        type: 'doughnut',
+        data: {
+          labels: entries.map(([m]) => modelShort(m)),
+          datasets: [{
+            data: entries.map(([, v]) => v.cost),
+            backgroundColor: entries.map(([m]) => modelColor(m)),
+            borderWidth: 2, borderColor: '#fff',
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, cutout: '55%',
+          plugins: {
+            legend: { position: 'bottom', labels: { font: { ...font, size: 11, weight: '600' }, color: '#475569', padding: 12, usePointStyle: true, pointStyleWidth: 8 } },
+            tooltip: {
+              backgroundColor: '#0F172A', titleFont: font, bodyFont: font, padding: 10, cornerRadius: 8,
+              callbacks: { label: (item) => { const total = item.dataset.data.reduce((s, v) => s + v, 0); return ' ' + item.label + ': $' + item.raw.toFixed(2) + (total > 0 ? ' (' + Math.round(item.raw / total * 100) + '%)' : ''); } }
+            }
+          }
+        }
+      });
+    }
+  }
+}
+
+function renderAIReview(devId) {
+  const cached = aiReviews[devId];
+  if (cached) return formatAIReview(cached);
+  if (!AI_CONFIGURED) return `<div style="font-size:12px;color:var(--text-tertiary);padding:12px;border:1px dashed var(--border);border-radius:8px;text-align:center">AI Review not available (GOOGLE_CREDENTIALS_BASE64 not set)</div>`;
+  return `<button class="btn btn-ai" id="aiBtn_${esc(devId)}" onclick="requestAIReview('${esc(devId)}')">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+    Generate AI Performance Review
+  </button>`;
+}
+
+function formatAIReview(r) {
+  const gradeColor = { A: 'var(--emerald)', B: 'var(--blue)', C: 'var(--amber)', D: 'var(--rose)', F: 'var(--rose)' }[r.grade] || 'var(--text-tertiary)';
+  return `<div class="ai-review">
+    <h4>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      AI Performance Review
+      <span style="margin-left:auto;font-size:20px;font-weight:800;color:${gradeColor}">${esc(r.grade)}</span>
+    </h4>
+    <div class="ai-review-summary">${esc(r.summary)}</div>
+    <div class="ai-badges">
+      <span class="ai-badge">Efficiency: <strong>${esc(r.efficiency_rating || '-')}</strong></span>
+      <span class="ai-badge">Adoption: <strong>${esc(r.adoption_rating || '-')}</strong></span>
+      <span class="ai-badge">Prompt Quality: <strong>${esc(r.prompt_quality || '-')}</strong></span>
+    </div>
+    ${r.work_patterns ? `<div class="ai-review-summary" style="font-style:italic;opacity:0.85;margin-top:6px">${esc(r.work_patterns)}</div>` : ''}
+    <div class="ai-review-grid">
+      <div class="ai-review-list">
+        <h5>Strengths</h5>
+        <ul>${(r.strengths || []).map(s => `<li>${esc(s)}</li>`).join('')}</ul>
+      </div>
+      <div class="ai-review-list">
+        <h5>Areas for Improvement</h5>
+        <ul>${(r.improvements || []).map(s => `<li>${esc(s)}</li>`).join('')}</ul>
+      </div>
+    </div>
+    <div class="ai-review-list" style="margin-bottom:12px">
+      <h5>Recommendations</h5>
+      <ul>${(r.recommendations || []).map(s => `<li>${esc(s)}</li>`).join('')}</ul>
+    </div>
+    ${(r.risk_flags || []).length ? `
+      <div class="ai-review-list" style="border-color:rgba(244,63,94,0.2);background:#FFF5F5">
+        <h5 style="color:var(--rose)">Risk Flags</h5>
+        <ul>${r.risk_flags.map(s => `<li style="color:var(--rose)">${esc(s)}</li>`).join('')}</ul>
+      </div>
+    ` : ''}
+  </div>`;
+}
+
+async function requestAIReview(devId) {
+  const btn = document.getElementById('aiBtn_' + devId);
+  if (btn) btn.outerHTML = '<div class="ai-loading"><div class="ai-spinner"></div>Generating AI review...</div>';
+  try {
+    const dp = getDateParams();
+    const body = { devId };
+    if (dp) {
+      const params = new URLSearchParams(dp);
+      if (params.get('from')) body.from = params.get('from');
+      if (params.get('to')) body.to = params.get('to');
+    }
+    const res = await fetch('/api/team/admin/ai-review', { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+    const data = await res.json();
+    if (data.ok && data.review) {
+      aiReviews[devId] = data.review;
+      const section = document.getElementById('aiReviewSection_' + devId);
+      if (section) section.innerHTML = formatAIReview(data.review);
+      toast('AI review generated for ' + devId);
+    } else {
+      const section = document.getElementById('aiReviewSection_' + devId);
+      if (section) section.innerHTML = `<div style="color:var(--rose);font-size:12px;padding:12px;border:1px solid rgba(244,63,94,0.2);border-radius:8px">${esc(data.error || 'Failed to generate review')}</div>`;
+    }
+  } catch (e) {
+    toast('AI review error: ' + e.message);
+  }
+}
+
+function exportPerfCSV() {
+  if (!PERF_DATA) return;
+  const devs = (PERF_DATA.developers || []).filter(d => d.sessions > 0);
+  computeAllHealth(devs);
+  devs.sort((a, b) => b.healthScore - a.healthScore);
+
+  const headers = ['Developer','Grade','Health Score','Sessions','Queries','Avg Depth','Tool Activation %','Cache Hit %','Unique Tools','Active Days','Streak','Trend %','Cost ($)','Tokens','Top Project'];
+  const rows = devs.map(d => {
+    const topProj = Object.entries(d.projectUsage || {}).sort((a, b) => b[1].tokens - a[1].tokens)[0];
+    return [
+      d.devId, d.gradeInfo.letter, Math.round(d.healthScore), d.sessions, d.queries,
+      d.avgQueriesPerSession, d.toolActivationRate, d.cacheHitRate.toFixed(1),
+      d.uniqueTools, d.activeDays, d.streak, d.trend, d.cost.toFixed(2), d.totalTokens,
+      topProj ? topProj[0].split(/[-/]/).pop() : ''
+    ].join(',');
+  });
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'performance-review-' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+  toast('CSV exported');
+}
+</script>
+</body>
+</html>

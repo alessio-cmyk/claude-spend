@@ -22,7 +22,8 @@ function getProductivityAnalytics(fromDate, toDate) {
         avgTokensPerQuery: 0, avgQueriesPerSession: 0, avgSessionDepth: 0,
         outputRatio: 0, cacheHitRate: 0,
         activeDays: 0, streak: 0, trend: 0,
-        toolActivationRate: 0, uniqueTools: 0, topTools: [],
+        toolActivationRate: 0, changeVerificationRate: 0, uniqueTools: 0, topTools: [],
+        hourlyBreakdown: new Array(24).fill(0),
         modelUsage: {}, projectUsage: {},
         dailyBreakdown: [],
       });
@@ -76,9 +77,28 @@ function getProductivityAnalytics(fromDate, toDate) {
       }
     }
 
+    // Hourly usage breakdown (from session timestamps, in dev's timezone)
+    const hourlyBuckets = new Array(24).fill(0);
+    const devTz = dev.timezone || null;
+    for (const s of sessions) {
+      if (s.timestamp) {
+        let h;
+        if (devTz) {
+          try {
+            h = parseInt(new Date(s.timestamp).toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: devTz }), 10);
+          } catch { h = new Date(s.timestamp).getHours(); }
+        } else {
+          h = new Date(s.timestamp).getHours();
+        }
+        if (h >= 0 && h < 24) hourlyBuckets[h]++;
+      }
+    }
+
     // Tool usage (from pre-aggregated _tools or fallback to queries[])
     const toolUsage = {};
     let sessionsWithTools = 0;
+    let sessionsWithBuild = 0;     // sessions with Edit or Write
+    let sessionsWithVerify = 0;    // sessions with Edit/Write AND Bash (ran tests/lint)
     for (const s of sessions) {
       const tools = s._tools || {};
       const hasTools = s._hasToolCall !== undefined ? s._hasToolCall : Object.keys(tools).length > 0;
@@ -87,6 +107,11 @@ function getProductivityAnalytics(fromDate, toDate) {
         teamTools[t] = (teamTools[t] || 0) + count;
       }
       if (hasTools) sessionsWithTools++;
+      const hasBuild = (tools.Edit || 0) > 0 || (tools.Write || 0) > 0;
+      if (hasBuild) {
+        sessionsWithBuild++;
+        if ((tools.Bash || 0) > 0) sessionsWithVerify++;
+      }
     }
 
     // Project usage
@@ -112,7 +137,8 @@ function getProductivityAnalytics(fromDate, toDate) {
     const avgSessionDepth = depths.reduce((a, b) => a + b, 0) / depths.length;
 
     // Output ratio + cache hit rate
-    const outputRatio = totals.totalTokens > 0 ? totals.totalOutputTokens / totals.totalTokens : 0;
+    const billableIO = (totals.totalInputTokens || 0) + (totals.totalOutputTokens || 0);
+    const outputRatio = billableIO > 0 ? totals.totalOutputTokens / billableIO : 0;
     const totalInput = (totals.totalInputTokens || 0) + (totals.totalCacheReadTokens || 0) + (totals.totalCacheCreationTokens || 0);
     const cacheHitRate = totalInput > 0 ? (totals.totalCacheReadTokens || 0) / totalInput : 0;
 
@@ -175,11 +201,13 @@ function getProductivityAnalytics(fromDate, toDate) {
       streak,
       trend: Math.round(trend),
       toolActivationRate: sessions.length > 0 ? Math.round(sessionsWithTools / sessions.length * 100) : 0,
+      changeVerificationRate: sessionsWithBuild > 0 ? Math.round(sessionsWithVerify / sessionsWithBuild * 100) : 0,
       uniqueTools: Object.keys(toolUsage).length,
       topTools,
       modelUsage,
       projectUsage,
       dailyBreakdown: sortedDaily,
+      hourlyBreakdown: hourlyBuckets,
     });
   }
 
@@ -206,16 +234,18 @@ function getProductivityAnalytics(fromDate, toDate) {
   const totalCost = activeDevs.reduce((s, d) => s + d.cost, 0);
   const totalQueries = activeDevs.reduce((s, d) => s + d.queries, 0);
   const totalSessions = activeDevs.reduce((s, d) => s + d.sessions, 0);
+  const totalInputTokens = activeDevs.reduce((s, d) => s + d.inputTokens, 0);
   const totalOutputTokens = activeDevs.reduce((s, d) => s + d.outputTokens, 0);
   const totalCacheRead = activeDevs.reduce((s, d) => s + d.cacheReadTokens, 0);
   const totalInput = activeDevs.reduce((s, d) => s + d.inputTokens + d.cacheReadTokens + d.cacheCreationTokens, 0);
+  const teamBillableIO = totalInputTokens + totalOutputTokens;
   const activeDays = new Set(teamDailyArr.map(d => d.date)).size;
 
   return {
     team: {
       devCount: activeDevs.length,
       totalTokens, totalCost, totalQueries, totalSessions, totalOutputTokens,
-      outputRatio: totalTokens > 0 ? Math.round(totalOutputTokens / totalTokens * 10000) / 100 : 0,
+      outputRatio: teamBillableIO > 0 ? Math.round(totalOutputTokens / teamBillableIO * 10000) / 100 : 0,
       cacheHitRate: totalInput > 0 ? Math.round(totalCacheRead / totalInput * 10000) / 100 : 0,
       activeDays,
       avgQueriesPerDay: activeDays > 0 ? Math.round(totalQueries / activeDays) : 0,

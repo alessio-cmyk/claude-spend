@@ -36,7 +36,7 @@
   .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--indigo); border-radius: 50%; animation: spin 0.7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .loading-text { color: var(--text-secondary); font-size: 15px; font-weight: 500; }
-  .container { max-width: 1200px; margin: 0 auto; padding: 40px 28px 60px; position: relative; z-index: 1; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 40px 28px 60px; position: relative; z-index: 1; transition: opacity 0.2s; }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
   .animate { animation: fadeUp 0.5s ease-out both; }
   .delay-1 { animation-delay: 0.05s; } .delay-2 { animation-delay: 0.1s; }
@@ -210,6 +210,7 @@
   .gs-or { font-size: 11px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; margin: 6px 0; letter-spacing: 0.5px; }
   .gs-note { font-size: 11px; color: var(--text-tertiary); margin-top: 12px; font-style: italic; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -218,15 +219,51 @@
   <div class="loading-text">Loading team data...</div>
 </div>
 
-<div id="app" class="container" style="display:none"></div>
 <div class="heatmap-tooltip" id="heatmapTooltip"></div>
-<div class="heatmap-tooltip" id="chartTooltip"></div>
+<div id="app" class="container" style="display:none"></div>
 
 <script>
+// --- Chart.js Setup ---
+const _chartInstances = {};
+Chart.defaults.font.family = "'Inter', sans-serif";
+
+// Chart.js plugin for doughnut center text
+const doughnutCenterTextPlugin = {
+  id: 'doughnutCenterText',
+  afterDraw(chart) {
+    if (chart.config.type !== 'doughnut' || !chart.options.plugins.doughnutCenterText) return;
+    const { text, subtext } = chart.options.plugins.doughnutCenterText;
+    const { ctx, chartArea: { left, right, top, bottom } } = chart;
+    const cx = (left + right) / 2;
+    const cy = (top + bottom) / 2;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = "800 16px 'Inter', sans-serif";
+    ctx.fillStyle = '#0F172A';
+    ctx.fillText(text, cx, cy - 4);
+    if (subtext) {
+      ctx.font = "500 9px 'Inter', sans-serif";
+      ctx.fillStyle = '#94A3B8';
+      ctx.fillText(subtext, cx, cy + 12);
+    }
+    ctx.restore();
+  }
+};
+Chart.register(doughnutCenterTextPlugin);
+
+function destroyChart(canvasId) {
+  if (_chartInstances[canvasId]) {
+    _chartInstances[canvasId].destroy();
+    delete _chartInstances[canvasId];
+  }
+}
+
 // --- State ---
 let LB_DATA = null;
 let PROD_DATA = null;
 let DEV_FULL_DATA = null; // full dev data for detail view
+let PROMPT_QUALITY = {}; // { devId: { score, rating, feedback } }
 let currentTab = 'leaderboard'; // leaderboard | productivity | dev
 let selectedDev = null;
 let dateRange = { preset: 'all', from: null, to: null };
@@ -238,6 +275,7 @@ let HEALTH_HISTORY = null;
 /* === FEATURE 4: Inactivity Data === */
 let INACTIVITY_DATA = null;
 let AUTH_ENABLED = false;
+let PROJECT_TAGS = {};
 let inactiveAlertDismissed = false;
 let gettingStartedDismissed = localStorage.getItem('cs_guide_dismissed') === '1';
 
@@ -264,8 +302,10 @@ function toISO(d) { return d.toISOString().split('T')[0]; }
 function daysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return toISO(d); }
 function modelClass(m) { if(m.includes('opus'))return'model-opus'; if(m.includes('sonnet'))return'model-sonnet'; if(m.includes('haiku'))return'model-haiku'; return'model-unknown'; }
 function modelShort(m) {
-  let x = m.match(/^claude-(opus|sonnet|haiku)-(\d+)-(\d+)/i);
+  let x = m.match(/^claude-(opus|sonnet|haiku)-(\d+)-(\d+)(?:-\d{6,})/i);
   if (x) return x[1][0].toUpperCase()+x[1].slice(1)+' '+x[2]+'.'+x[3];
+  x = m.match(/^claude-(opus|sonnet|haiku)-(\d+)(?:-\d{6,})/i);
+  if (x) return x[1][0].toUpperCase()+x[1].slice(1)+' '+x[2];
   x = m.match(/^claude-(\d+)-(\d+)-(opus|sonnet|haiku)/i);
   if (x) return x[3][0].toUpperCase()+x[3].slice(1)+' '+x[1]+'.'+x[2];
   if(m.includes('opus'))return'Opus'; if(m.includes('sonnet'))return'Sonnet'; if(m.includes('haiku'))return'Haiku'; return m;
@@ -307,6 +347,12 @@ function getDateParams() {
 }
 
 async function loadData() {
+  // Show loading overlay on re-fetches (not initial load)
+  const app = document.getElementById('app');
+  if (app.style.display !== 'none') {
+    app.style.opacity = '0.5';
+    app.style.pointerEvents = 'none';
+  }
   try {
     const dp = getDateParams();
     const q = dp ? '?' + dp : '';
@@ -327,9 +373,18 @@ async function loadData() {
     INACTIVITY_DATA = await inactRes.json();
     HEALTH_HISTORY = await hhRes.json();
     try { const h = await healthRes.json(); AUTH_ENABLED = !!h.authEnabled; } catch {}
+    try { const tRes = await fetch('/api/team/project-tags'); PROJECT_TAGS = await tRes.json(); } catch {}
     DEV_FULL_DATA = null;
+    app.style.opacity = '1';
+    app.style.pointerEvents = '';
     render();
+    // Fetch prompt quality scores async (Gemini call, may be slow) — re-render when ready
+    fetch('/api/team/prompt-quality' + q).then(r => r.json()).then(d => {
+      if (d.scores) { PROMPT_QUALITY = d.scores; render(); }
+    }).catch(() => {});
   } catch (e) {
+    app.style.opacity = '1';
+    app.style.pointerEvents = '';
     document.getElementById('loading').innerHTML =
       '<div style="font-size:48px;margin-bottom:16px">&#9888;&#65039;</div>' +
       '<div style="color:#64748b;font-size:15px">Failed to load: ' + esc(e.message) + '</div>';
@@ -355,6 +410,11 @@ function applyCustom() {
 }
 function goToDev(id) { selectedDev = id; currentTab = 'dev'; DEV_FULL_DATA = null; render(); }
 function goBack() { currentTab = 'leaderboard'; selectedDev = null; DEV_FULL_DATA = null; render(); }
+function sortLB(key) {
+  if (sortState.key === key) sortState.dir = sortState.dir === 'desc' ? 'asc' : 'desc';
+  else { sortState.key = key; sortState.dir = 'desc'; }
+  render();
+}
 
 // --- Main View (Leaderboard + Productivity tabs) ---
 function renderMainView(app) {
@@ -377,6 +437,7 @@ function renderMainView(app) {
         <div class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
         <h1>Claude Spend</h1>
       </div>
+      <div class="header-right"><a href="/admin.html" class="btn" style="text-decoration:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Admin</a></div>
     </div>
     <div class="nav-tabs animate delay-1">
       <button class="nav-tab ${currentTab==='leaderboard'?'active':''}" onclick="setTab('leaderboard')">Leaderboard</button>
@@ -488,11 +549,26 @@ function renderLeaderboard() {
 
   document.getElementById('gettingStartedContainer').innerHTML = gsHtml;
 
+  // Sort leaderboard
+  const sortKey = sortState.key;
+  const sortDir = sortState.dir === 'asc' ? 1 : -1;
+  lb.sort((a, b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if (sortKey === 'devId') return sortDir * String(av).localeCompare(String(bv));
+    return sortDir * ((av || 0) - (bv || 0));
+  });
+
+  const sortTh = (label, key, align) => {
+    const active = sortState.key === key;
+    const arrow = active ? (sortState.dir === 'desc' ? ' &#9660;' : ' &#9650;') : '';
+    return `<th style="${align?'text-align:right;':''}" class="${active?'sorted':''}" onclick="sortLB('${key}')">${label}${arrow}</th>`;
+  };
+
   document.getElementById('lbTable').innerHTML = `
     ${exportBtn}
     ${wowBannerHtml}
     <div class="table-card"><table>
-      <thead><tr><th style="width:36px">#</th><th>Developer</th><th style="text-align:right">Sessions</th><th style="text-align:right">Queries</th><th style="text-align:right" class="sorted">Tokens</th><th style="text-align:right">Cost</th><th style="width:120px">Usage</th><th>WoW Trend</th><th style="width:36px">Sync</th></tr></thead>
+      <thead><tr><th style="width:36px">#</th>${sortTh('Developer','devId',false)}${sortTh('Sessions','totalSessions',true)}${sortTh('Queries','totalQueries',true)}${sortTh('Tokens','totalTokens',true)}${sortTh('Cost','totalCost',true)}<th style="width:120px">Usage</th><th>WoW Trend</th><th style="width:36px">Sync</th></tr></thead>
       <tbody>${lb.map((d,i) => {
         const wow = WOW_DATA && WOW_DATA.devDeltas && WOW_DATA.devDeltas[d.devId];
         const wowPct = wow ? wow.queries.pct : 0;
@@ -666,11 +742,15 @@ function renderProductivity() {
     </div>`;
   }
   if (PROD_DATA.projectBreakdown.length) {
-    bottomHtml += `<div class="chart-card"><h3>Projects</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr><th style="padding:6px 0;border-bottom:1px solid var(--border)">Project</th><th style="text-align:right;padding:6px 0;border-bottom:1px solid var(--border)">Sessions</th><th style="text-align:right;padding:6px 0;border-bottom:1px solid var(--border)">Cost</th><th style="text-align:right;padding:6px 0;border-bottom:1px solid var(--border)">Devs</th></tr></thead>
-        <tbody>${PROD_DATA.projectBreakdown.slice(0,10).map(p => `<tr style="cursor:default"><td style="padding:6px 0;border-bottom:1px solid var(--border)"><span class="proj-name">${esc(projShort(p.project))}</span></td><td style="padding:6px 0;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono)">${fmtFull(p.sessions)}</td><td style="padding:6px 0;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono)">${fmtCost(p.cost)}</td><td style="padding:6px 0;border-bottom:1px solid var(--border);text-align:right">${p.devCount}</td></tr>`).join('')}</tbody>
-      </table>
+    const tagBadge = (proj) => { const tag = PROJECT_TAGS[proj]; return tag ? `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;background:var(--indigo);color:white;margin-left:6px;vertical-align:middle">${esc(tag)}</span>` : ''; };
+    const projRow = (p) => `<tr style="cursor:default"><td style="padding:8px 8px 8px 0;border-bottom:1px solid var(--border)"><span class="proj-name">${esc(projShort(p.project))}</span>${tagBadge(p.project)}</td><td style="padding:8px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);white-space:nowrap">${fmtFull(p.sessions)}</td><td style="padding:8px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);white-space:nowrap">${fmtCost(p.cost)}</td><td style="padding:8px 0 8px 8px;border-bottom:1px solid var(--border);text-align:right">${p.devCount}</td></tr>`;
+    const projHead = `<thead><tr><th style="padding:8px 8px 8px 0;border-bottom:1px solid var(--border);text-align:left">Project</th><th style="text-align:right;padding:8px;border-bottom:1px solid var(--border);white-space:nowrap">Sessions</th><th style="text-align:right;padding:8px;border-bottom:1px solid var(--border);white-space:nowrap">Cost</th><th style="text-align:right;padding:8px 0 8px 8px;border-bottom:1px solid var(--border)">Devs</th></tr></thead>`;
+    const half = Math.ceil(Math.min(PROD_DATA.projectBreakdown.length, 20) / 2);
+    bottomHtml += `<div class="chart-card" style="grid-column:1/-1"><h3>Projects</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 32px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">${projHead}<tbody>${PROD_DATA.projectBreakdown.slice(0,half).map(projRow).join('')}</tbody></table>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">${projHead}<tbody>${PROD_DATA.projectBreakdown.slice(half,20).map(projRow).join('')}</tbody></table>
+      </div>
     </div>`;
   }
   document.getElementById('prodBottom').innerHTML = bottomHtml;
@@ -700,14 +780,11 @@ async function renderDevView(app) {
     <div class="date-bar animate delay-1" id="dateBar"></div>
     <div id="devKpis" class="animate delay-1"></div>
     <div id="devCharts" class="charts-grid animate delay-2"></div>
-    <div id="devCacheChart" class="animate delay-2"></div>
     <div id="devROI" class="grid-2 animate delay-3"></div>
     <div id="devBottom" class="grid-2 animate delay-4"></div>
     <div id="devHistogram" class="animate delay-4"></div>
     <div id="devStreakCal" class="animate delay-4"></div>
     <div id="devHeatmap" class="animate delay-4"></div>
-    <div id="devPromptsLog" class="animate delay-4"></div>
-    <div id="devSessions" class="animate delay-4"></div>
     <div class="footer">Made with <a href="https://claude.ai/code" target="_blank">Claude Code</a> by <a href="https://www.linkedin.com/in/alessio-petrozziello/" target="_blank">Alessio</a></div>
   `;
   renderDateBar();
@@ -753,24 +830,22 @@ async function renderDevView(app) {
     renderDonut('devModelChart', 'devModelLegend', d.modelUsage);
   }, 50);
 
-  /* === FEATURE 4: Cache Efficiency Over Time === */
-  if (d.dailyBreakdown && d.dailyBreakdown.length > 1) {
-    document.getElementById('devCacheChart').innerHTML = `
-      <div class="chart-card" style="margin-bottom:28px">
-        <h3>Cache Efficiency Over Time</h3>
-        <canvas id="devCacheCanvas"></canvas>
-      </div>
-    `;
-    setTimeout(() => renderCacheEfficiencyChart('devCacheCanvas', d.dailyBreakdown, d.cacheReadTokens, d.totalTokens), 80);
-  }
-
   /* === FEATURE 2: Individual Radar Chart === */
   const roi = computeROIRadar(d, PROD_DATA.developers.filter(x => x.sessions > 0));
+  const ROI_TIPS = {
+    'Query Depth': 'Go deeper in sessions — iterate on the problem instead of starting new chats',
+    'Tool Activation': 'Let Claude edit files and run commands, not just answer questions',
+    'Prompt Quality': (PROMPT_QUALITY[d.devId] && PROMPT_QUALITY[d.devId].feedback) || 'Write specific prompts: include file paths, expected behavior, and action verbs',
+    'Consistency': 'Use AI daily — make it part of your routine, not a once-in-a-while tool',
+    'Build Ratio': 'Let AI write and edit code, not just read and search — trust it to make changes',
+    'Verification': 'Run tests or lint after AI edits — add a Bash step to verify changes',
+  };
   let roiHtml = `<div class="chart-card"><h3>ROI Signals</h3>
     <canvas id="devRadarChart"></canvas>
     ${roi.map(m => {
       const c = m.score >= 70 ? 'var(--emerald)' : m.score >= 40 ? 'var(--amber)' : 'var(--rose)';
-      return `<div class="roi-row" style="margin-top:8px"><span class="roi-label">${m.label}</span><div class="roi-track"><div class="roi-fill" style="width:${m.score}%;background:${c}"></div></div><span class="roi-value" style="color:${c}">${Math.round(m.score)}</span></div>`;
+      const tip = m.score < 50 && ROI_TIPS[m.label] ? `<div style="font-size:10px;color:var(--text-tertiary);margin:2px 0 4px;line-height:1.3">${ROI_TIPS[m.label]}</div>` : '';
+      return `<div class="roi-row" style="margin-top:8px" title="${ROI_TIPS[m.label] || ''}"><span class="roi-label">${m.label}</span><div class="roi-track"><div class="roi-fill" style="width:${m.score}%;background:${c}"></div></div><span class="roi-value" style="color:${c}">${Math.round(m.score)}</span></div>${tip}`;
     }).join('')}
   </div>`;
 
@@ -788,11 +863,14 @@ async function renderDevView(app) {
   const projEntries = Object.entries(d.projectUsage).sort((a,b) => b[1].tokens - a[1].tokens);
   let bottomHtml = '';
   if (projEntries.length) {
-    bottomHtml += `<div class="chart-card"><h3>Projects</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr><th style="padding:6px 0;border-bottom:1px solid var(--border)">Project</th><th style="text-align:right;padding:6px 0;border-bottom:1px solid var(--border)">Sessions</th><th style="text-align:right;padding:6px 0;border-bottom:1px solid var(--border)">Queries</th><th style="text-align:right;padding:6px 0;border-bottom:1px solid var(--border)">Cost</th></tr></thead>
-        <tbody>${projEntries.slice(0,10).map(([p,v]) => `<tr style="cursor:default"><td style="padding:6px 0;border-bottom:1px solid var(--border)"><span class="proj-name">${esc(projShort(p))}</span></td><td style="padding:6px 0;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono)">${fmtFull(v.sessions)}</td><td style="padding:6px 0;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono)">${fmtFull(v.queries)}</td><td style="padding:6px 0;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono)">${fmtCost(v.cost)}</td></tr>`).join('')}</tbody>
-      </table>
+    const half = Math.ceil(Math.min(projEntries.length, 20) / 2);
+    const projRow = (p,v) => `<tr style="cursor:default"><td style="padding:8px 8px 8px 0;border-bottom:1px solid var(--border)"><span class="proj-name">${esc(projShort(p))}</span></td><td style="padding:8px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);white-space:nowrap">${fmtFull(v.sessions)}</td><td style="padding:8px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);white-space:nowrap">${fmtFull(v.queries)}</td><td style="padding:8px 0 8px 8px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);white-space:nowrap">${fmtCost(v.cost)}</td></tr>`;
+    const projHead = `<thead><tr><th style="padding:8px 8px 8px 0;border-bottom:1px solid var(--border);text-align:left">Project</th><th style="text-align:right;padding:8px;border-bottom:1px solid var(--border);white-space:nowrap">Sessions</th><th style="text-align:right;padding:8px;border-bottom:1px solid var(--border);white-space:nowrap">Queries</th><th style="text-align:right;padding:8px 0 8px 8px;border-bottom:1px solid var(--border);white-space:nowrap">Cost</th></tr></thead>`;
+    bottomHtml += `<div class="chart-card" style="grid-column:1/-1"><h3>Projects</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 32px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">${projHead}<tbody>${projEntries.slice(0,half).map(([p,v]) => projRow(p,v)).join('')}</tbody></table>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">${projHead}<tbody>${projEntries.slice(half,20).map(([p,v]) => projRow(p,v)).join('')}</tbody></table>
+      </div>
     </div>`;
   }
   document.getElementById('devBottom').innerHTML = bottomHtml;
@@ -841,81 +919,36 @@ async function renderDevView(app) {
       setTimeout(() => renderHeatmap('devHeatmapCanvas', d.dailyBreakdown, false), 120);
     }
 
-    /* === FEATURE 6: First Prompts Log === */
-    const recentSessions = sessions.slice(0, 20);
-    if (recentSessions.length) {
-      document.getElementById('devPromptsLog').innerHTML = `
-        <div class="chart-card" style="margin-bottom:28px">
-          <button class="prompts-toggle" onclick="togglePrompts(this)">Show recent prompts &#9662;</button>
-          <div id="promptsList" style="display:none;margin-top:14px">
-            ${recentSessions.map(s => {
-              const date = formatDate(s.date || '');
-              const model = s.model || (s._models ? Object.keys(s._models).sort((a,b) => (s._models[b].tokens||0) - (s._models[a].tokens||0))[0] : '') || '';
-              const mc = modelClass(model);
-              const ms = modelShort(model);
-              const proj = projDecode(s.project || 'unknown');
-              let fp = s.firstPrompt || '';
-              if (fp.length >= 59 && !fp.endsWith('...')) fp += '...';
-              return `<div class="prompt-row">
-                <span class="prompt-date">${date}</span>
-                <span class="model-badge ${mc}" style="flex-shrink:0"><span class="model-dot"></span>${esc(ms)}</span>
-                <span style="color:var(--text);font-weight:600;font-size:12px;flex-shrink:0">${esc(proj)}</span>
-                <span class="prompt-text">${fp ? esc(fp) : '<em style="color:var(--text-tertiary)">No prompt</em>'}</span>
-              </div>`;
-            }).join('')}
-          </div>
-        </div>
-      `;
-    }
-
-    // Recent sessions table
-    const tableSessions = sessions.slice(0, 20);
-    if (tableSessions.length) {
-      document.getElementById('devSessions').innerHTML = `
-        <div class="section-header"><div class="section-icon" style="background:linear-gradient(135deg,#ECFDF5,#D1FAE5)"><svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg></div><div class="section-title">Recent Sessions</div></div>
-        <div class="table-card"><table>
-          <thead><tr><th>Date</th><th>Project</th><th style="text-align:right">Queries</th><th style="text-align:right">Tokens</th><th style="text-align:right">Cost</th><th>Model</th></tr></thead>
-          <tbody>${tableSessions.map(s => {
-            const tm = s._models ? Object.entries(s._models).sort((a,b) => b[1].tokens - a[1].tokens)[0] : null;
-            return `<tr style="cursor:default"><td style="white-space:nowrap;color:var(--text-secondary);font-weight:500;font-size:12px">${formatDate(s.date||'')}</td><td><span class="proj-name">${esc(projShort(s.project||'unknown'))}</span></td><td class="token-num">${s.queryCount||0}</td><td class="token-num" style="font-weight:700">${fmt(s.totalTokens||0)}</td><td class="token-num">${fmtCost(s.cost||0)}</td><td>${tm?'<span class="model-badge '+modelClass(tm[0])+'"><span class="model-dot"></span>'+modelShort(tm[0])+'</span>':'-'}</td></tr>`;
-          }).join('')}</tbody>
-        </table></div>
-      `;
-    }
-  } catch {}
+  } catch (err) {
+    console.error('Failed to load session details:', err);
+  }
 }
 
-/* === FEATURE 6: Toggle Prompts === */
-function togglePrompts(btn) {
-  const list = document.getElementById('promptsList');
-  if (!list) return;
-  const showing = list.style.display !== 'none';
-  list.style.display = showing ? 'none' : 'block';
-  btn.innerHTML = showing ? 'Show recent prompts &#9662;' : 'Hide recent prompts &#9652;';
-}
 
 // --- Analytics ---
 function computeHealth(d) {
   const qDepth = Math.min(20, (d.avgQueriesPerSession / 10) * 20);
   const toolAct = Math.min(20, (d.toolActivationRate / 100) * 20);
   const toolDiv = Math.min(15, (d.uniqueTools / 10) * 15);
-  const cache = Math.min(20, (d.cacheHitRate / 50) * 20);
+  const pqScore = PROMPT_QUALITY[d.devId] ? PROMPT_QUALITY[d.devId].score : 50;
+  const promptQ = Math.min(20, (pqScore / 100) * 20);
   const modelCount = Object.keys(d.modelUsage).length;
   const modelDisc = modelCount <= 2 ? 10 : modelCount <= 4 ? 7 : 4;
-  const consist = Math.min(15, (d.activeDays / 30) * 15);
-  return qDepth + toolAct + toolDiv + cache + modelDisc + consist;
+  // Consistency: use actual data span for "all", else selected range
+  let rangeDays = 30;
+  if (dateRange.preset === 'all') {
+    const db = d.dailyBreakdown || [];
+    if (db.length > 0) {
+      const first = new Date(db[0].date || db[0]);
+      rangeDays = Math.max(1, Math.ceil((Date.now() - first.getTime()) / 86400000) + 1);
+    }
+  } else {
+    rangeDays = { '1d': 1, '7d': 7, '30d': 30, '90d': 90 }[dateRange.preset] || 30;
+  }
+  const consist = Math.min(15, (d.activeDays / rangeDays) * 15);
+  return qDepth + toolAct + toolDiv + promptQ + modelDisc + consist;
 }
 
-function computeROI(d) {
-  return [
-    { label: 'Query Depth', score: Math.min(100, (d.avgQueriesPerSession / 15) * 100) },
-    { label: 'Tool Activation', score: Math.min(100, d.toolActivationRate) },
-    { label: 'Cache Leverage', score: Math.min(100, d.cacheHitRate * 2) },
-    { label: 'Consistency', score: Math.min(100, (d.activeDays / 30) * 100) },
-    { label: 'Cost Efficiency', score: Math.min(100, Math.max(0, d.queries > 0 ? (1 - (d.cost / d.queries) / 0.10) * 100 : 0)) },
-    { label: 'Model Discipline', score: Object.keys(d.modelUsage).length <= 2 ? 100 : Object.keys(d.modelUsage).length <= 4 ? 70 : 40 },
-  ];
-}
 
 /* === FEATURE 2: ROI Radar computations === */
 function computeROIRadar(d, allDevs) {
@@ -925,9 +958,9 @@ function computeROIRadar(d, allDevs) {
   // 2. Tool Activation Rate: % sessions with >= 1 tool call
   const toolActivation = Math.min(100, d.toolActivationRate);
 
-  // 3. Cache Leverage: cacheReadTokens / (inputTokens + cacheReadTokens) * 100
-  const cacheInput = (d.inputTokens || 0) + (d.cacheReadTokens || 0);
-  const cacheLeverage = cacheInput > 0 ? ((d.cacheReadTokens || 0) / cacheInput) * 100 : 0;
+  // 3. Prompt Quality: AI-scored via Gemini (0-100), falls back to 50 if not yet loaded
+  const pq = PROMPT_QUALITY[d.devId];
+  const promptQuality = pq ? pq.score : null;
 
   // 4. Session Consistency: % working days (Mon-Fri) with >= 1 session
   const daily = d.dailyBreakdown || [];
@@ -947,152 +980,161 @@ function computeROIRadar(d, allDevs) {
   }
   const sessionConsistency = workingDaysTotal > 0 ? (workingDaysActive / workingDaysTotal) * 100 : 0;
 
-  // 5. Cost Efficiency: outputTokens / cost, normalised against team max
-  const costEff = d.cost > 0 ? (d.outputTokens || 0) / d.cost : 0;
-  const maxCostEff = Math.max(...allDevs.map(x => x.cost > 0 ? (x.outputTokens || 0) / x.cost : 0), 1);
-  const costEfficiency = (costEff / maxCostEff) * 100;
+  // 5. Build Ratio: Edit+Write vs Read+Grep+Glob — are they using AI to write code, not just read?
+  const tools = {};
+  (d.topTools || []).forEach(t => { tools[t.tool] = t.count; });
+  const buildCalls = (tools.Edit || 0) + (tools.Write || 0);
+  const browseCalls = (tools.Read || 0) + (tools.Grep || 0) + (tools.Glob || 0);
+  const buildRatio = (buildCalls + browseCalls) > 0 ? (buildCalls / (buildCalls + browseCalls)) * 100 : 0;
 
-  // 6. Model Discipline: % queries NOT on most expensive model (non-Opus)
-  const totalQ = Object.values(d.modelUsage).reduce((s, v) => s + (v.queries || 0), 0);
-  let opusQ = 0;
-  for (const [m, v] of Object.entries(d.modelUsage)) {
-    if (m.includes('opus')) opusQ += v.queries || 0;
-  }
-  const modelDiscipline = totalQ > 0 ? ((totalQ - opusQ) / totalQ) * 100 : 100;
+  // 6. Change Verification: when AI edits code, do they run tests/lint? (from server-computed metric)
+  const changeVerification = d.changeVerificationRate || 0;
 
   return [
     { label: 'Query Depth', score: queryDepth, raw: d.avgQueriesPerSession },
     { label: 'Tool Activation', score: toolActivation, raw: d.toolActivationRate + '%' },
-    { label: 'Cache Leverage', score: Math.min(100, cacheLeverage), raw: cacheLeverage.toFixed(1) + '%' },
+    { label: 'Prompt Quality', score: promptQuality !== null ? promptQuality : 50, raw: pq ? pq.rating : 'loading...' },
     { label: 'Consistency', score: Math.min(100, sessionConsistency), raw: sessionConsistency.toFixed(0) + '%' },
-    { label: 'Cost Efficiency', score: Math.min(100, costEfficiency), raw: fmt(Math.round(costEff)) },
-    { label: 'Model Discipline', score: Math.min(100, modelDiscipline), raw: modelDiscipline.toFixed(0) + '%' },
+    { label: 'Build Ratio', score: Math.min(100, buildRatio), raw: Math.round(buildRatio) + '%' },
+    { label: 'Verification', score: Math.min(100, changeVerification), raw: changeVerification + '%' },
   ];
 }
 
 // --- Chart rendering ---
 
-/* === FEATURE 3: Daily Bar Chart with Cost Line + Power Day Markers === */
+/* === FEATURE 3: Daily Bar Chart with Cost Line (Chart.js) === */
 function renderStackedBarChart(id, daily) {
   const canvas = document.getElementById(id);
   if (!canvas || !daily || !daily.length) return;
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const w = canvas.parentElement.clientWidth - 48;
-  const h = 200;
-  canvas.width = w * dpr; canvas.height = h * dpr;
-  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-  ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
+  destroyChart(id);
 
+  const labels = daily.map(d => formatDate(d.date));
   const queryVals = daily.map(d => d.queries || 0);
   const costVals = daily.map(d => d.cost || 0);
-  const maxQ = Math.max(...queryVals, 1);
-  const maxCost = Math.max(...costVals, 0.01);
+  const tokenVals = daily.map(d => d.tokens || 0);
 
-  // Power day markers (p90)
-  const sortedQ = [...queryVals].sort((a, b) => a - b);
-  const p90 = sortedQ[Math.floor(sortedQ.length * 0.9)] || Infinity;
-
-  const barW = Math.max(4, Math.min(24, (w - 80) / daily.length - 2));
-  const gap = 2; const chartH = h - 36; const startX = 44; const rightMargin = 40;
-
-  // Left Y-axis (queries)
-  ctx.font = '500 9px Inter, system-ui'; ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'right';
-  for (let i = 0; i <= 4; i++) {
-    const val = (maxQ / 4) * i;
-    const y = chartH - (chartH * i / 4) + 8;
-    ctx.fillText(fmt(Math.round(val)), startX - 8, y + 3);
-    ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(startX, y); ctx.lineTo(w - rightMargin, y); ctx.stroke();
-  }
-
-  // Right Y-axis (cost)
-  ctx.textAlign = 'left';
-  for (let i = 0; i <= 4; i++) {
-    const val = (maxCost / 4) * i;
-    const y = chartH - (chartH * i / 4) + 8;
-    ctx.fillText('$' + val.toFixed(val >= 10 ? 0 : val >= 1 ? 1 : 2), w - rightMargin + 6, y + 3);
-  }
-
-  const grad = ctx.createLinearGradient(0, chartH + 8, 0, 0);
-  grad.addColorStop(0, '#818CF8'); grad.addColorStop(1, '#6366F1');
-
-  // Query bars
-  daily.forEach((d, i) => {
-    const x = startX + i * (barW + gap);
-    const baseY = chartH + 8;
-    const bH = Math.max(2, (queryVals[i] / maxQ) * chartH);
-
-    ctx.fillStyle = grad;
-    ctx.beginPath(); roundedRect(ctx, x, baseY - bH, barW, bH, Math.min(3, barW / 2)); ctx.fill();
-
-    // Power day marker
-    if (queryVals[i] >= p90 && p90 > 0) {
-      ctx.fillStyle = '#F59E0B';
-      ctx.font = '10px Inter, system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('\u26A1', x + barW / 2, baseY - bH - 4);
+  _chartInstances[id] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Queries',
+          data: queryVals,
+          backgroundColor: '#6366F1',
+          borderRadius: 3,
+          yAxisID: 'y',
+          order: 2,
+        },
+        {
+          label: 'Cost ($)',
+          data: costVals,
+          type: 'line',
+          borderColor: '#F97316',
+          backgroundColor: 'rgba(249,115,22,0.08)',
+          pointBackgroundColor: '#F97316',
+          pointRadius: daily.length <= 60 ? 2.5 : 0,
+          borderWidth: 2,
+          tension: 0.3,
+          fill: false,
+          yAxisID: 'y1',
+          order: 1,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0F172A',
+          titleFont: { weight: '600', size: 11 },
+          bodyFont: { size: 11 },
+          padding: { x: 10, y: 6 },
+          cornerRadius: 6,
+          callbacks: {
+            title: (items) => daily[items[0].dataIndex].date,
+            label: (item) => {
+              const i = item.dataIndex;
+              if (item.datasetIndex === 0) return `Queries: ${queryVals[i]}, Tokens: ${fmt(tokenVals[i])}`;
+              return `Cost: ${fmtCost(costVals[i])}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { font: { size: 9, weight: '500' }, color: '#94A3B8', maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }
+        },
+        y: {
+          position: 'left',
+          grid: { color: 'rgba(0,0,0,0.04)' },
+          ticks: { font: { size: 9, weight: '500' }, color: '#94A3B8', callback: v => fmt(v) },
+          beginAtZero: true,
+        },
+        y1: {
+          position: 'right',
+          grid: { drawOnChartArea: false },
+          ticks: { font: { size: 9, weight: '500' }, color: '#94A3B8', callback: v => '$' + (v >= 10 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v.toFixed(2)) },
+          beginAtZero: true,
+        }
+      }
     }
   });
-
-  // Cost line (orange)
-  ctx.beginPath();
-  ctx.strokeStyle = '#F97316'; ctx.lineWidth = 2;
-  daily.forEach((d, i) => {
-    const x = startX + i * (barW + gap) + barW / 2;
-    const y = chartH + 8 - (costVals[i] / maxCost) * chartH;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-
-  // Cost dots
-  ctx.fillStyle = '#F97316';
-  daily.forEach((d, i) => {
-    if (daily.length <= 60 || i % Math.max(1, Math.floor(daily.length / 30)) === 0) {
-      const x = startX + i * (barW + gap) + barW / 2;
-      const y = chartH + 8 - (costVals[i] / maxCost) * chartH;
-      ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
-    }
-  });
-
-  // X-axis labels
-  ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'center'; ctx.font = '500 9px Inter, system-ui';
-  const step = Math.max(1, Math.floor(daily.length / 7));
-  daily.forEach((d, i) => {
-    if (i % step === 0 || i === daily.length - 1)
-      ctx.fillText(formatDate(d.date), startX + i * (barW + gap) + barW / 2, chartH + 24);
-  });
-
-  // Tooltip
-  setupChartTooltip(canvas, daily, startX, barW, gap, chartH, (d, i) => {
-    return `${d.date} &mdash; ${queryVals[i]} queries, ${fmt(d.tokens || 0)} tokens, ${fmtCost(costVals[i])}`;
-  });
+  canvas.parentElement.style.position = 'relative';
+  canvas.style.height = '200px';
 }
 
 function renderDonut(canvasId, legendId, modelMap) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
+  destroyChart(canvasId);
   const entries = Object.entries(modelMap).sort((a,b) => b[1].tokens - a[1].tokens);
   if (!entries.length) return;
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const size = Math.min(160, canvas.parentElement.clientWidth - 48);
-  canvas.width = size * dpr; canvas.height = size * dpr;
-  canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
-  ctx.scale(dpr, dpr);
-  const cx = size/2, cy = size/2, r = size/2 - 6, ir = r * 0.6;
   const total = entries.reduce((s,[,v]) => s + v.tokens, 0);
-  let angle = -Math.PI / 2;
-  entries.forEach(([model, v]) => {
-    const sa = (v.tokens / total) * Math.PI * 2;
-    ctx.beginPath(); ctx.arc(cx, cy, r, angle, angle + sa); ctx.arc(cx, cy, ir, angle + sa, angle, true); ctx.closePath();
-    ctx.fillStyle = getModelColor(model); ctx.fill();
-    ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2; ctx.stroke();
-    angle += sa;
+
+  canvas.style.height = '160px';
+  canvas.style.maxWidth = '160px';
+  canvas.style.margin = '0 auto';
+
+  _chartInstances[canvasId] = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: entries.map(([m]) => modelShort(m)),
+      datasets: [{
+        data: entries.map(([,v]) => v.tokens),
+        backgroundColor: entries.map(([m]) => getModelColor(m)),
+        borderColor: '#FFFFFF',
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      cutout: '60%',
+      plugins: {
+        legend: { display: false },
+        doughnutCenterText: { text: fmt(total), subtext: 'tokens' },
+        tooltip: {
+          backgroundColor: '#0F172A',
+          titleFont: { weight: '600', size: 11 },
+          bodyFont: { size: 11 },
+          padding: { x: 10, y: 6 },
+          cornerRadius: 6,
+          callbacks: {
+            label: (item) => {
+              const [model, v] = entries[item.dataIndex];
+              const pct = ((v.tokens / total) * 100).toFixed(1);
+              return `${modelShort(model)}: ${fmt(v.tokens)} (${pct}%) ${fmtCost(v.cost)}`;
+            }
+          }
+        }
+      }
+    }
   });
-  ctx.fillStyle = '#0F172A'; ctx.textAlign = 'center';
-  ctx.font = '800 16px Inter, system-ui'; ctx.fillText(fmt(total), cx, cy + 2);
-  ctx.font = '500 9px Inter, system-ui'; ctx.fillStyle = '#94A3B8'; ctx.fillText('tokens', cx, cy + 14);
 
   const leg = document.getElementById(legendId);
   if (leg) leg.innerHTML = entries.map(([model, v]) => {
@@ -1108,54 +1150,44 @@ function renderHeatmap(canvasId, dailyData, isTeam) {
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
 
-  // Build a map of date -> queries
   const dayMap = {};
   for (const d of dailyData) {
     if (d.date) dayMap[d.date] = (dayMap[d.date] || 0) + (d.queries || 0);
   }
 
-  // Dynamic range: from first data date to today
   const today = new Date();
   const allDates = Object.keys(dayMap).sort();
   const firstDate = allDates.length > 0 ? new Date(allDates[0]) : new Date(today);
-
-  // Align start to Sunday of the week containing firstDate
   const startDate = new Date(firstDate);
   startDate.setDate(startDate.getDate() - startDate.getDay());
 
-  // Calculate number of weeks from startDate to today
   const totalDays = Math.ceil((today - startDate) / 86400000) + 1;
   const cols = Math.ceil(totalDays / 7);
   const rows = 7;
 
   const cellSize = 12, cellGap = 2, leftPad = 30, topPad = 18;
   const maxW = canvas.parentElement.clientWidth - 48;
-  // Shrink cells if needed to fit
   const neededW = leftPad + cols * (cellSize + cellGap) + 10;
   const scale = neededW > maxW ? maxW / neededW : 1;
   const cs = Math.floor(cellSize * scale), cg = Math.max(1, Math.floor(cellGap * scale));
 
   const w = leftPad + cols * (cs + cg) + 10;
   const h = topPad + rows * (cs + cg) + 10;
-
   canvas.width = w * dpr; canvas.height = h * dpr;
   canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
   ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
 
-  // Get all query values to compute intensity levels
   const allVals = Object.values(dayMap).filter(v => v > 0);
   const maxQ = allVals.length > 0 ? Math.max(...allVals) : 1;
   const levels = [0, maxQ * 0.15, maxQ * 0.35, maxQ * 0.6, maxQ * 0.85];
   const colors = ['#eee', '#B2DFDB', '#4DB6AC', '#00897B', '#00695C', '#004D40'];
 
-  // Day labels
   ctx.font = '500 9px Inter, system-ui'; ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'right';
   const dayLabels = ['', 'M', '', 'W', '', 'F', ''];
   for (let r = 0; r < 7; r++) {
     if (dayLabels[r]) ctx.fillText(dayLabels[r], leftPad - 6, topPad + r * (cs + cg) + cs - 2);
   }
 
-  // Month labels
   ctx.textAlign = 'center';
   let lastMonth = -1;
   const cellDates = [];
@@ -1172,7 +1204,6 @@ function renderHeatmap(canvasId, dailyData, isTeam) {
     }
   }
 
-  // Draw cells + store hit areas for tooltip
   const hitAreas = [];
   for (const cell of cellDates) {
     const { col, row, date: dt } = cell;
@@ -1180,23 +1211,20 @@ function renderHeatmap(canvasId, dailyData, isTeam) {
     const val = dayMap[dateStr] || 0;
     const x = leftPad + col * (cs + cg);
     const y = topPad + row * (cs + cg);
-
     let colorIdx = 0;
     if (val > 0) {
       for (let l = levels.length - 1; l >= 0; l--) {
         if (val >= levels[l]) { colorIdx = l + 1; break; }
       }
     }
-
     ctx.fillStyle = dt > today ? '#f5f5f5' : colors[colorIdx];
     ctx.beginPath();
     roundedRect(ctx, x, y, cs, cs, 2);
     ctx.fill();
-
     hitAreas.push({ x, y, w: cs, h: cs, dateStr, val, dt });
   }
 
-  // Tooltip handling
+  // Tooltip
   const tooltip = document.getElementById('heatmapTooltip');
   canvas.onmousemove = (e) => {
     const rect = canvas.getBoundingClientRect();
@@ -1222,228 +1250,118 @@ function renderHeatmap(canvasId, dailyData, isTeam) {
   canvas.onmouseleave = () => { tooltip.style.display = 'none'; };
 }
 
-/* === FEATURE 2: Radar Chart Rendering === */
-function drawRadar(ctx, cx, cy, r, data, color, fillAlpha, showLabels, showValues) {
-  const n = data.length;
-  const angleStep = (Math.PI * 2) / n;
-
-  // Grid rings
-  if (showLabels) {
-    for (let ring = 1; ring <= 4; ring++) {
-      const rr = (r * ring) / 4;
-      ctx.beginPath();
-      ctx.strokeStyle = 'rgba(0,0,0,0.06)'; ctx.lineWidth = 1;
-      for (let i = 0; i <= n; i++) {
-        const a = -Math.PI / 2 + i * angleStep;
-        const x = cx + Math.cos(a) * rr;
-        const y = cy + Math.sin(a) * rr;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    }
-
-    // Axis lines
-    for (let i = 0; i < n; i++) {
-      const a = -Math.PI / 2 + i * angleStep;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
-      ctx.strokeStyle = 'rgba(0,0,0,0.06)'; ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-  }
-
-  // Data polygon
-  ctx.beginPath();
-  for (let i = 0; i < n; i++) {
-    const a = -Math.PI / 2 + i * angleStep;
-    const val = Math.max(0, Math.min(100, data[i].score)) / 100;
-    const x = cx + Math.cos(a) * r * val;
-    const y = cy + Math.sin(a) * r * val;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-  ctx.fillStyle = color.replace(')', `,${fillAlpha})`).replace('rgb', 'rgba');
-  ctx.fill();
-  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
-
-  // Labels
-  if (showLabels) {
-    ctx.font = '600 10px Inter, system-ui'; ctx.fillStyle = '#475569'; ctx.textAlign = 'center';
-    for (let i = 0; i < n; i++) {
-      const a = -Math.PI / 2 + i * angleStep;
-      const lx = cx + Math.cos(a) * (r + 20);
-      const ly = cy + Math.sin(a) * (r + 20);
-      ctx.fillText(data[i].label, lx, ly + 3);
-      if (showValues && data[i].raw !== undefined) {
-        ctx.font = '500 9px Inter, system-ui'; ctx.fillStyle = '#94A3B8';
-        ctx.fillText(String(data[i].raw), lx, ly + 14);
-        ctx.font = '600 10px Inter, system-ui'; ctx.fillStyle = '#475569';
-      }
-    }
-  }
-}
-
+/* === FEATURE 2: Radar Chart Rendering (Chart.js) === */
 function renderIndividualRadar(canvasId, data) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !data.length) return;
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const size = Math.min(280, canvas.parentElement.clientWidth - 48);
-  canvas.width = size * dpr; canvas.height = size * dpr;
-  canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
-  ctx.scale(dpr, dpr);
-  const cx = size / 2, cy = size / 2, r = size / 2 - 40;
-  drawRadar(ctx, cx, cy, r, data, 'rgb(99,102,241)', 0.2, true, true);
+  destroyChart(canvasId);
+  canvas.style.height = '280px';
+
+  _chartInstances[canvasId] = new Chart(canvas, {
+    type: 'radar',
+    data: {
+      labels: data.map(d => d.label),
+      datasets: [{
+        data: data.map(d => Math.max(0, Math.min(100, d.score))),
+        backgroundColor: 'rgba(99,102,241,0.2)',
+        borderColor: '#6366F1',
+        borderWidth: 2,
+        pointBackgroundColor: '#6366F1',
+        pointRadius: 3,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0F172A',
+          titleFont: { weight: '600', size: 11 },
+          bodyFont: { size: 11 },
+          padding: { x: 10, y: 6 },
+          cornerRadius: 6,
+          callbacks: {
+            label: (item) => {
+              const d = data[item.dataIndex];
+              return `${d.label}: ${Math.round(d.score)} (${d.raw !== undefined ? d.raw : ''})`;
+            }
+          }
+        }
+      },
+      scales: {
+        r: {
+          beginAtZero: true,
+          max: 100,
+          ticks: { display: false, stepSize: 25 },
+          grid: { color: 'rgba(0,0,0,0.06)' },
+          angleLines: { color: 'rgba(0,0,0,0.06)' },
+          pointLabels: { font: { size: 10, weight: '600' }, color: '#475569' }
+        }
+      }
+    }
+  });
 }
 
 function renderTeamRadar(canvasId, legendId, devs) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !devs.length) return;
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const size = Math.min(400, canvas.parentElement.clientWidth - 48);
-  canvas.width = size * dpr; canvas.height = size * dpr;
-  canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
-  ctx.scale(dpr, dpr);
-  const cx = size / 2, cy = size / 2, r = size / 2 - 50;
+  destroyChart(canvasId);
+  canvas.style.height = '400px';
 
   const allROI = devs.map(d => computeROIRadar(d, devs));
+  const radarLabels = allROI[0].map(d => d.label);
 
-  // Draw grid + labels first (from first dev)
-  drawRadar(ctx, cx, cy, r, allROI[0], 'rgba(0,0,0,0)', 0, true, false);
+  const datasets = allROI.map((roi, i) => ({
+    label: devs[i].devId,
+    data: roi.map(d => Math.max(0, Math.min(100, d.score))),
+    backgroundColor: DEV_COLORS[i % DEV_COLORS.length] + '1A',
+    borderColor: DEV_COLORS[i % DEV_COLORS.length],
+    borderWidth: 2,
+    pointBackgroundColor: DEV_COLORS[i % DEV_COLORS.length],
+    pointRadius: 2,
+  }));
 
-  // Overlay each dev
-  allROI.forEach((roi, i) => {
-    drawRadar(ctx, cx, cy, r, roi, DEV_COLORS[i % DEV_COLORS.length], 0.1, false, false);
+  _chartInstances[canvasId] = new Chart(canvas, {
+    type: 'radar',
+    data: { labels: radarLabels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0F172A',
+          titleFont: { weight: '600', size: 11 },
+          bodyFont: { size: 11 },
+          padding: { x: 10, y: 6 },
+          cornerRadius: 6,
+        }
+      },
+      scales: {
+        r: {
+          beginAtZero: true,
+          max: 100,
+          ticks: { display: false, stepSize: 25 },
+          grid: { color: 'rgba(0,0,0,0.06)' },
+          angleLines: { color: 'rgba(0,0,0,0.06)' },
+          pointLabels: { font: { size: 10, weight: '600' }, color: '#475569' }
+        }
+      }
+    }
   });
 
-  // Legend
   const leg = document.getElementById(legendId);
   if (leg) {
     leg.innerHTML = devs.map((d, i) => `<div class="legend-item"><div class="legend-dot" style="background:${DEV_COLORS[i % DEV_COLORS.length]}"></div><span style="font-weight:600">${esc(d.devId)}</span></div>`).join('');
   }
 }
 
-/* === FEATURE 4: Cache Efficiency Over Time Chart === */
-function renderCacheEfficiencyChart(canvasId, daily, totalCacheRead, totalTokens) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas || !daily.length) return;
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const w = canvas.parentElement.clientWidth - 48;
-  const h = 180;
-  canvas.width = w * dpr; canvas.height = h * dpr;
-  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-  ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
-
-  const startX = 44, chartH = h - 36;
-
-  // Compute daily cache hit ratio
-  const ratios = daily.map(d => {
-    const total = (d.tokens || 0);
-    return total > 0 ? ((d.cacheReadTokens || 0) / total) * 100 : 0;
-  });
-
-  // Team avg cache hit ratio (from PROD_DATA)
-  const teamAvg = PROD_DATA.team.cacheHitRate || 0;
-
-  // Savings badge: $2.70/MTok saving rate
-  const savingRate = 2.70 / 1e6;
-  const totalSavings = (totalCacheRead || 0) * savingRate;
-
-  const barW = Math.max(4, Math.min(24, (w - 80) / daily.length - 2));
-  const gap = 2;
-
-  // Y-axis
-  ctx.font = '500 9px Inter, system-ui'; ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'right';
-  for (let i = 0; i <= 4; i++) {
-    const val = 25 * i;
-    const y = chartH - (chartH * i / 4) + 8;
-    ctx.fillText(val + '%', startX - 8, y + 3);
-    ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(startX, y); ctx.lineTo(w - 10, y); ctx.stroke();
-  }
-
-  // Team avg reference line
-  const refY = chartH + 8 - (teamAvg / 100) * chartH;
-  ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(startX, refY); ctx.lineTo(w - 10, refY); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'left'; ctx.font = '500 8px Inter, system-ui';
-  ctx.fillText('Team avg: ' + teamAvg.toFixed(1) + '%', startX + 4, refY - 4);
-
-  // Area fill
-  ctx.beginPath();
-  ctx.moveTo(startX, chartH + 8);
-  daily.forEach((d, i) => {
-    const x = startX + i * (barW + gap) + barW / 2;
-    const y = chartH + 8 - (ratios[i] / 100) * chartH;
-    ctx.lineTo(x, y);
-  });
-  ctx.lineTo(startX + (daily.length - 1) * (barW + gap) + barW / 2, chartH + 8);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(245,158,11,0.15)';
-  ctx.fill();
-
-  // Line
-  ctx.beginPath();
-  ctx.strokeStyle = '#F59E0B'; ctx.lineWidth = 2;
-  daily.forEach((d, i) => {
-    const x = startX + i * (barW + gap) + barW / 2;
-    const y = chartH + 8 - (ratios[i] / 100) * chartH;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-
-  // Dots
-  ctx.fillStyle = '#F59E0B';
-  daily.forEach((d, i) => {
-    if (daily.length <= 60 || i % Math.max(1, Math.floor(daily.length / 30)) === 0) {
-      const x = startX + i * (barW + gap) + barW / 2;
-      const y = chartH + 8 - (ratios[i] / 100) * chartH;
-      ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
-    }
-  });
-
-  // X-axis labels
-  ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'center'; ctx.font = '500 9px Inter, system-ui';
-  const step = Math.max(1, Math.floor(daily.length / 7));
-  daily.forEach((d, i) => {
-    if (i % step === 0 || i === daily.length - 1)
-      ctx.fillText(formatDate(d.date), startX + i * (barW + gap) + barW / 2, chartH + 24);
-  });
-
-  // Savings badge
-  ctx.fillStyle = '#F59E0B'; ctx.font = '700 11px Inter, system-ui'; ctx.textAlign = 'right';
-  const badgeText = '$' + totalSavings.toFixed(2) + ' saved';
-  const tw = ctx.measureText(badgeText).width;
-  ctx.fillStyle = 'rgba(245,158,11,0.1)';
-  roundedRect(ctx, w - tw - 28, 2, tw + 16, 20, 6);
-  ctx.fill();
-  ctx.fillStyle = '#B45309'; ctx.textAlign = 'center';
-  ctx.fillText(badgeText, w - tw / 2 - 20, 16);
-
-  // Tooltip
-  let cumSavings = 0;
-  const cumSavingsArr = daily.map(d => { cumSavings += (d.cacheReadTokens || 0) * savingRate; return cumSavings; });
-  setupChartTooltip(canvas, daily, startX, barW, gap, chartH, (d, i) => {
-    return `${d.date} &mdash; Cache hit: ${ratios[i].toFixed(1)}%, Cumulative savings: $${cumSavingsArr[i].toFixed(2)}`;
-  });
-}
-
-/* === FEATURE 5: Session Depth Histogram === */
+/* === FEATURE 5: Session Depth Histogram (Chart.js) === */
 function renderSessionHistogram(canvasId, statsId, sessions) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !sessions.length) return;
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const w = canvas.parentElement.clientWidth - 48;
-  const h = 160;
-  canvas.width = w * dpr; canvas.height = h * dpr;
-  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-  ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
+  destroyChart(canvasId);
 
   const depths = sessions.map(s => s.queryCount || 0);
   const bins = [
@@ -1459,25 +1377,48 @@ function renderSessionHistogram(canvasId, statsId, sessions) {
       if (q >= b.min && q <= b.max) { b.count++; break; }
     }
   }
-  const maxCount = Math.max(...bins.map(b => b.count), 1);
 
-  const startX = 60, barH = 18, gapY = 6, chartW = w - startX - 60;
+  canvas.style.height = '160px';
 
-  bins.forEach((b, i) => {
-    const y = 10 + i * (barH + gapY);
-    const bW = Math.max(2, (b.count / maxCount) * chartW);
-
-    // Label
-    ctx.font = '600 11px Inter, system-ui'; ctx.fillStyle = '#475569'; ctx.textAlign = 'right';
-    ctx.fillText(b.label, startX - 10, y + barH / 2 + 4);
-
-    // Bar
-    ctx.fillStyle = '#8B5CF6';
-    ctx.beginPath(); roundedRect(ctx, startX, y, bW, barH, 4); ctx.fill();
-
-    // Count
-    ctx.font = '600 11px Inter, system-ui'; ctx.fillStyle = '#475569'; ctx.textAlign = 'left';
-    ctx.fillText(b.count, startX + bW + 6, y + barH / 2 + 4);
+  _chartInstances[canvasId] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: bins.map(b => b.label),
+      datasets: [{
+        data: bins.map(b => b.count),
+        backgroundColor: '#8B5CF6',
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0F172A',
+          titleFont: { weight: '600', size: 11 },
+          bodyFont: { size: 11 },
+          padding: { x: 10, y: 6 },
+          cornerRadius: 6,
+          callbacks: {
+            label: (item) => `${item.raw} sessions`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(0,0,0,0.04)' },
+          ticks: { font: { size: 11, weight: '600' }, color: '#475569' },
+          beginAtZero: true,
+        },
+        y: {
+          grid: { display: false },
+          ticks: { font: { size: 11, weight: '600' }, color: '#475569' }
+        }
+      }
+    }
   });
 
   // Stats
@@ -1505,7 +1446,6 @@ function renderStreakCalendar(canvasId, statsId, sessions) {
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
 
-  // Build day->session count map from ALL sessions (not just filtered for longest streak)
   const dayCount = {};
   for (const s of sessions) {
     if (s.date && s.date !== 'unknown') dayCount[s.date] = (dayCount[s.date] || 0) + 1;
@@ -1515,9 +1455,8 @@ function renderStreakCalendar(canvasId, statsId, sessions) {
   const allDates = Object.keys(dayCount).sort();
   const firstDate = allDates.length > 0 ? new Date(allDates[0]) : new Date(today);
 
-  // Total days from first active date to today
   const days = Math.ceil((today - firstDate) / 86400000) + 1;
-  const cols = Math.min(30, days); // max 30 columns, wrap into rows
+  const cols = Math.min(30, days);
   const rows = Math.ceil(days / cols);
 
   const cellSize = 14, cellGap = 3;
@@ -1529,13 +1468,11 @@ function renderStreakCalendar(canvasId, statsId, sessions) {
   const leftPad = 10, topPad = 6;
   const w = leftPad + cols * (cs + cg) + 10;
   const h = topPad + rows * (cs + cg) + 10;
-
   canvas.width = w * dpr; canvas.height = h * dpr;
   canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
   ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
 
   const startDate = new Date(firstDate);
-
   let totalActiveDays = 0;
   const maxSess = Math.max(...Object.values(dayCount), 1);
   const l1 = maxSess * 0.33, l2 = maxSess * 0.66;
@@ -1550,27 +1487,23 @@ function renderStreakCalendar(canvasId, statsId, sessions) {
     const x = leftPad + col * (cs + cg);
     const y = topPad + row * (cs + cg);
 
-    if (dt > today) {
-      ctx.fillStyle = '#E2E8F0';
-    } else if (count === 0) {
-      ctx.fillStyle = '#F1F5F9';
-    } else {
+    if (dt > today) ctx.fillStyle = '#E2E8F0';
+    else if (count === 0) ctx.fillStyle = '#F1F5F9';
+    else {
       totalActiveDays++;
       if (count > l2) ctx.fillStyle = '#00695C';
       else if (count > l1) ctx.fillStyle = '#00897B';
       else ctx.fillStyle = '#4DB6AC';
     }
-
     ctx.beginPath();
     ctx.arc(x + cs / 2, y + cs / 2, cs / 2, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Compute streaks from ALL session history
+  // Compute streaks
   const allDays = Object.keys(dayCount).sort();
   let currentStreak = 0, longestStreak = 0, tempStreak = 1;
 
-  // Helper: check if gap between two dates only contains weekend days
   function gapIsOnlyWeekends(prev, curr) {
     const diffDays = (curr - prev) / 86400000;
     for (let d = 1; d < diffDays; d++) {
@@ -1581,7 +1514,6 @@ function renderStreakCalendar(canvasId, statsId, sessions) {
     return true;
   }
 
-  // Longest streak (weekends don't break streaks)
   for (let i = 1; i < allDays.length; i++) {
     const prev = new Date(allDays[i - 1]), curr = new Date(allDays[i]);
     const diff = (curr - prev) / 86400000;
@@ -1590,7 +1522,6 @@ function renderStreakCalendar(canvasId, statsId, sessions) {
   }
   longestStreak = Math.max(longestStreak, tempStreak);
 
-  // Current streak (from most recent day going backwards, weekends don't break)
   if (allDays.length > 0) {
     currentStreak = 1;
     for (let i = allDays.length - 1; i > 0; i--) {
@@ -1609,26 +1540,6 @@ function renderStreakCalendar(canvasId, statsId, sessions) {
       <div><span class="streak-stat-val">${totalActiveDays}</span>Active days (${days}d range)</div>
     `;
   }
-}
-
-// --- Shared chart tooltip helper ---
-function setupChartTooltip(canvas, data, startX, barW, gap, chartH, formatFn) {
-  const tooltip = document.getElementById('chartTooltip');
-  const dpr = window.devicePixelRatio || 1;
-  canvas.onmousemove = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (canvas.width / rect.width) / dpr;
-    const idx = Math.floor((mx - startX) / (barW + gap));
-    if (idx >= 0 && idx < data.length) {
-      tooltip.innerHTML = formatFn(data[idx], idx);
-      tooltip.style.display = 'block';
-      tooltip.style.left = (e.clientX + 12) + 'px';
-      tooltip.style.top = (e.clientY - 10) + 'px';
-    } else {
-      tooltip.style.display = 'none';
-    }
-  };
-  canvas.onmouseleave = () => { tooltip.style.display = 'none'; };
 }
 
 function roundedRect(ctx, x, y, w, h, r) {
@@ -1655,19 +1566,13 @@ function dismissGuide() {
   if (el) { el.style.opacity = '0'; el.style.transform = 'translateY(-10px)'; setTimeout(() => el.remove(), 300); }
 }
 
-/* === FEATURE 3c: Health History Line Chart === */
+/* === FEATURE 3c: Health History Line Chart (Chart.js) === */
 function renderHealthHistoryChart(canvasId, legendId, history) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !history || history.length < 2) return;
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const w = canvas.parentElement.clientWidth - 48;
-  const h = 220;
-  canvas.width = w * dpr; canvas.height = h * dpr;
-  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-  ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
+  destroyChart(canvasId);
 
-  const startX = 44, chartH = h - 36, rightMargin = 10;
+  const labels = history.map(e => formatDate(e.date));
 
   // Collect all dev names
   const devNames = new Set();
@@ -1676,91 +1581,100 @@ function renderHealthHistoryChart(canvasId, legendId, history) {
   }
   const devList = [...devNames];
 
-  // Y-axis (0-100)
-  ctx.font = '500 9px Inter, system-ui'; ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'right';
-  for (let i = 0; i <= 4; i++) {
-    const val = 25 * i;
-    const y = chartH - (chartH * i / 4) + 8;
-    ctx.fillText(val, startX - 8, y + 3);
-    ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(startX, y); ctx.lineTo(w - rightMargin, y); ctx.stroke();
-  }
+  // Team average dataset (bold, with fill)
+  const datasets = [{
+    label: 'Team Average',
+    data: history.map(e => e.teamScore),
+    borderColor: '#6366F1',
+    backgroundColor: 'rgba(99,102,241,0.08)',
+    borderWidth: 2.5,
+    pointBackgroundColor: '#6366F1',
+    pointRadius: 3,
+    tension: 0.3,
+    fill: true,
+    order: 0,
+  }];
 
-  // Target reference line at 70
-  const refY = chartH + 8 - (70 / 100) * chartH;
-  ctx.setLineDash([6, 4]);
-  ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(startX, refY); ctx.lineTo(w - rightMargin, refY); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'left'; ctx.font = '500 8px Inter, system-ui';
-  ctx.fillText('Target: 70', startX + 4, refY - 4);
-
-  const pointSpacing = (w - startX - rightMargin) / Math.max(1, history.length - 1);
-
-  // Draw dev lines (semi-transparent)
+  // Individual dev datasets (semi-transparent)
   devList.forEach((devName, di) => {
     const color = DEV_COLORS[di % DEV_COLORS.length];
-    ctx.beginPath();
-    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.4;
-    let started = false;
-    history.forEach((entry, i) => {
-      const score = entry.devScores && entry.devScores[devName];
-      if (score == null) return;
-      const x = startX + i * pointSpacing;
-      const y = chartH + 8 - (score / 100) * chartH;
-      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    datasets.push({
+      label: devName,
+      data: history.map(e => (e.devScores && e.devScores[devName] != null) ? e.devScores[devName] : null),
+      borderColor: color + '66',
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.3,
+      fill: false,
+      spanGaps: true,
+      order: 1,
     });
-    ctx.stroke();
-    ctx.globalAlpha = 1;
   });
 
-  // Draw team average line (bold) with area fill
-  ctx.beginPath();
-  const teamPoints = [];
-  history.forEach((entry, i) => {
-    const x = startX + i * pointSpacing;
-    const y = chartH + 8 - (entry.teamScore / 100) * chartH;
-    teamPoints.push({ x, y });
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  });
-
-  // Area fill under team line
-  if (teamPoints.length >= 2) {
-    const areaPath = new Path2D();
-    areaPath.moveTo(teamPoints[0].x, chartH + 8);
-    for (const p of teamPoints) areaPath.lineTo(p.x, p.y);
-    areaPath.lineTo(teamPoints[teamPoints.length - 1].x, chartH + 8);
-    areaPath.closePath();
-    ctx.fillStyle = 'rgba(99,102,241,0.08)';
-    ctx.fill(areaPath);
-  }
-
-  // Team line stroke
-  ctx.beginPath();
-  teamPoints.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
-  ctx.strokeStyle = '#6366F1'; ctx.lineWidth = 2.5; ctx.stroke();
-
-  // Team dots
-  ctx.fillStyle = '#6366F1';
-  teamPoints.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill(); });
-
-  // X-axis labels
-  ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'center'; ctx.font = '500 9px Inter, system-ui';
-  const step = Math.max(1, Math.floor(history.length / 7));
-  history.forEach((entry, i) => {
-    if (i % step === 0 || i === history.length - 1)
-      ctx.fillText(formatDate(entry.date), startX + i * pointSpacing, chartH + 24);
-  });
-
-  // Tooltip
-  setupChartTooltip(canvas, history, startX, pointSpacing - 2, 2, chartH, (entry, i) => {
-    let tip = entry.date + ' &mdash; Team: ' + entry.teamScore;
-    if (entry.devScores) {
-      for (const [name, score] of Object.entries(entry.devScores)) {
-        tip += ', ' + name + ': ' + score;
-      }
+  // Target line at 70 plugin
+  const targetLinePlugin = {
+    id: 'targetLine_' + canvasId,
+    afterDraw(chart) {
+      const { ctx, chartArea: { left, right }, scales: { y } } = chart;
+      const yPos = y.getPixelForValue(70);
+      ctx.save();
+      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = '#94A3B8';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(left, yPos);
+      ctx.lineTo(right, yPos);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#94A3B8';
+      ctx.font = "500 8px 'Inter', sans-serif";
+      ctx.textAlign = 'left';
+      ctx.fillText('Target: 70', left + 4, yPos - 4);
+      ctx.restore();
     }
-    return tip;
+  };
+
+  canvas.style.height = '220px';
+
+  _chartInstances[canvasId] = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0F172A',
+          titleFont: { weight: '600', size: 11 },
+          bodyFont: { size: 11 },
+          padding: { x: 10, y: 6 },
+          cornerRadius: 6,
+          mode: 'index',
+          callbacks: {
+            title: (items) => history[items[0].dataIndex].date,
+            label: (item) => {
+              if (item.raw == null) return null;
+              return `${item.dataset.label}: ${item.raw}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { font: { size: 9, weight: '500' }, color: '#94A3B8', maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }
+        },
+        y: {
+          min: 0,
+          max: 100,
+          grid: { color: 'rgba(0,0,0,0.04)' },
+          ticks: { font: { size: 9, weight: '500' }, color: '#94A3B8', stepSize: 25 }
+        }
+      }
+    },
+    plugins: [targetLinePlugin]
   });
 
   // Legend

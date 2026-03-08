@@ -4,6 +4,8 @@ const https = require('https');
 async function syncToTeam(serverUrl, devId, parsedData, apiKey) {
   const body = { devId, data: parsedData };
   if (apiKey) body.key = apiKey;
+  // Send client timezone for accurate hourly usage analysis
+  try { body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch {}
   const payload = JSON.stringify(body);
   const url = new URL('/api/team/sync', serverUrl);
   const transport = url.protocol === 'https:' ? https : http;

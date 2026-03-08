@@ -13,12 +13,55 @@ if (fs.existsSync(envPath)) {
 }
 
 const express = require('express');
+const http = require('http');
+const https = require('https');
 const { createTeamRouter } = require('./team/router');
 const { isEnabled: s3Enabled, downloadAll } = require('./team/s3');
 
 const args = process.argv.slice(2);
 const portIndex = args.indexOf('--port');
 const port = portIndex !== -1 ? parseInt(args[portIndex + 1], 10) : parseInt(process.env.PORT, 10) || 3457;
+const pullIndex = args.indexOf('--pull');
+const pullUrl = pullIndex !== -1 ? args[pullIndex + 1] : null;
+
+/* === Pull all dev data from a remote team server === */
+function fetchJSON(url) {
+  const transport = url.startsWith('https') ? https : http;
+  return new Promise((resolve, reject) => {
+    transport.get(url, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        try { resolve(JSON.parse(body)); }
+        catch { reject(new Error('Invalid JSON from ' + url)); }
+      });
+    }).on('error', reject);
+  });
+}
+
+async function pullFromRemote(remoteUrl) {
+  const { saveDeveloper } = require('./team/store');
+
+  console.log(`[Pull] Fetching dev list from ${remoteUrl}...`);
+  const base = remoteUrl.replace(/\/$/, '');
+  const devs = await fetchJSON(base + '/api/team/devs');
+  console.log(`[Pull] Found ${devs.length} developers`);
+
+  let pulled = 0;
+  for (const dev of devs) {
+    const devId = dev.devId;
+    try {
+      const data = await fetchJSON(base + '/api/team/dev/' + encodeURIComponent(devId));
+      // Use saveDeveloper to merge (dedup by sessionId) instead of overwriting
+      const merged = await saveDeveloper(devId, data);
+      pulled++;
+      console.log(`[Pull] ${devId}: ${(merged.sessions || []).length} sessions (merged)`);
+    } catch (err) {
+      console.error(`[Pull] Failed to pull ${devId}: ${err.message}`);
+    }
+  }
+  console.log(`[Pull] Done — pulled ${pulled}/${devs.length} developers\n`);
+}
 
 async function start() {
   // Download data from S3 before starting (App Runner has ephemeral storage)
@@ -27,6 +70,12 @@ async function start() {
   if (s3Enabled()) {
     try { await downloadAll(); }
     catch (err) { console.error('[S3] Initial download failed:', err.message); }
+  }
+
+  // Pull from remote server if --pull <url> specified
+  if (pullUrl) {
+    try { await pullFromRemote(pullUrl); }
+    catch (err) { console.error('[Pull] Failed:', err.message); }
   }
   // Log allowlist status
   const alPath = path.join(process.env.CLAUDE_SPEND_DATA || path.join(process.cwd(), 'data', 'team'), 'allowlist.json');
