@@ -34,16 +34,16 @@ function formatSessionForPrompt(s, idx) {
   const proj = s.project ? s.project.split(/[-/]/).slice(-2).join('/') : 'unknown';
   const tools = s._tools ? Object.entries(s._tools).map(([t, c]) => `${t}(${c})`).join(', ') : '';
   const models = s._models ? Object.keys(s._models).join(', ') : (s.model || 'unknown');
-  const prompt = (s.firstPrompt || '(no prompt)').substring(0, 150);
+  const prompt = (s.firstPrompt || '(no prompt)').substring(0, 150).replace(/[\x00-\x1f]/g, ' ');
   return `[${idx + 1}] ${s.date || 'unknown'} | ${proj} | ${models} | ${s.queryCount || 0}q | $${(s.cost || 0).toFixed(2)} | tools: ${tools || 'none'}
-   Prompt: "${prompt}"`;
+   Prompt: ${prompt}`;
 }
 
 async function generateDevReview(devMetrics, sessions, teamBaseline, devTimezone) {
   const client = getClient();
   const model = client.getGenerativeModel({
     model: process.env.VERTEX_MODEL || 'gemini-2.5-flash',
-    generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
+    generationConfig: { temperature: 0.4, maxOutputTokens: 8192 },
   });
 
   const d = devMetrics;
@@ -215,7 +215,40 @@ Be specific and reference actual prompts, projects, and numbers from the data. K
     clean = clean.trim();
   }
 
-  return JSON.parse(clean);
+  // Try progressively looser JSON parsing
+  try {
+    return JSON.parse(clean);
+  } catch {
+    // Extract the JSON object even if there's trailing garbage
+    const braceMatch = clean.match(/\{[\s\S]*\}/);
+    if (braceMatch) {
+      try { return JSON.parse(braceMatch[0]); } catch {}
+    }
+    // Fix common issue: truncated strings — close any open strings/arrays/objects
+    let fixed = clean;
+    // If truncated mid-string, close the string
+    const openQuotes = (fixed.match(/"/g) || []).length;
+    if (openQuotes % 2 !== 0) fixed += '"';
+    // Close open arrays and objects
+    const opens = (fixed.match(/\[/g) || []).length - (fixed.match(/\]/g) || []).length;
+    const braces = (fixed.match(/\{/g) || []).length - (fixed.match(/\}/g) || []).length;
+    for (let i = 0; i < opens; i++) fixed += ']';
+    for (let i = 0; i < braces; i++) fixed += '}';
+    try { return JSON.parse(fixed); } catch {}
+    // Last resort: return a structured error
+    return {
+      summary: 'AI review generated but response could not be parsed.',
+      grade: 'N/A',
+      strengths: [],
+      improvements: [],
+      recommendations: ['Try generating the review again.'],
+      prompt_quality: 'unknown',
+      efficiency_rating: 'unknown',
+      adoption_rating: 'unknown',
+      work_patterns: '',
+      risk_flags: ['Review parsing failed — raw response may have been truncated.'],
+    };
+  }
 }
 
 /**
