@@ -38,21 +38,33 @@ async function saveDeveloper(devId, data, timezone) {
       try { existing = JSON.parse(fs.readFileSync(fp, 'utf-8')); } catch {}
     }
 
-    // Merge sessions by sessionId (deduplicate)
-    const existingIds = new Set((existing.sessions || []).map(s => s.sessionId));
-    const rawNewSessions = (data.sessions || []).filter(s => !existingIds.has(s.sessionId));
+    // Merge sessions by sessionId — update existing if incoming has more queries
+    const existingMap = new Map((existing.sessions || []).map(s => [s.sessionId, s]));
+    const rawNewSessions = [];
+    const updatedSessions = [];
+    for (const s of (data.sessions || [])) {
+      const prev = existingMap.get(s.sessionId);
+      if (!prev) {
+        rawNewSessions.push(s);
+      } else if (s.queryCount > (prev.queryCount || 0)) {
+        // Session grew — update it
+        updatedSessions.push(s);
+        existingMap.set(s.sessionId, compactSession(s));
+      }
+    }
 
     // Archive full sessions with queries[] before compacting
-    if (rawNewSessions.length > 0) {
+    const toArchive = [...rawNewSessions, ...updatedSessions];
+    if (toArchive.length > 0) {
       const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
       const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
-      const lines = rawNewSessions.map(s => JSON.stringify(s)).join('\n') + '\n';
+      const lines = toArchive.map(s => JSON.stringify(s)).join('\n') + '\n';
       fs.appendFileSync(archivePath, lines);
       uploadFile(archivePath);
     }
 
     const newSessions = rawNewSessions.map(compactSession);
-    const merged = [...(existing.sessions || []), ...newSessions];
+    const merged = [...existingMap.values(), ...newSessions];
 
     // Persist client timezone if provided
     if (timezone) existing.timezone = timezone;
@@ -168,16 +180,31 @@ function computeDailyUsage(sessions) {
   const map = {};
   for (const s of sessions) {
     if (!s.date || s.date === 'unknown') continue;
-    if (!map[s.date]) map[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0 };
-    map[s.date].tokens += s.totalTokens || 0;
-    map[s.date].cost += s.cost || 0;
-    map[s.date].sessions += 1;
-    map[s.date].queries += s.queryCount || 0;
+    // Use per-query daily breakdown if available
+    if (s._dailyBreakdown) {
+      const days = new Set();
+      for (const [day, stats] of Object.entries(s._dailyBreakdown)) {
+        if (!map[day]) map[day] = { date: day, tokens: 0, cost: 0, sessions: 0, queries: 0 };
+        map[day].tokens += stats.tokens || 0;
+        map[day].cost += stats.cost || 0;
+        map[day].queries += stats.queries || 0;
+        days.add(day);
+      }
+      // Count session once per day it was active
+      for (const d of days) map[d].sessions += 1;
+    } else {
+      // Fallback: attribute all to session start date
+      if (!map[s.date]) map[s.date] = { date: s.date, tokens: 0, cost: 0, sessions: 0, queries: 0 };
+      map[s.date].tokens += s.totalTokens || 0;
+      map[s.date].cost += s.cost || 0;
+      map[s.date].sessions += 1;
+      map[s.date].queries += s.queryCount || 0;
+    }
   }
   return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// Strip raw queries[], pre-aggregate into _models, _tools, _hasToolCall
+// Strip raw queries[], pre-aggregate into _models, _tools, _hasToolCall, _dailyBreakdown
 function compactSession(s) {
   if (!s.queries || s.queries.length === 0) {
     // Already compacted or no queries
@@ -185,6 +212,7 @@ function compactSession(s) {
   }
   const tools = {};
   const models = {};
+  const dailyBreakdown = {};
   let hasToolCall = false;
   for (const q of s.queries) {
     const m = q.model || 'unknown';
@@ -198,15 +226,32 @@ function compactSession(s) {
       tools[t] = (tools[t] || 0) + 1;
       hasToolCall = true;
     }
+    // Per-day breakdown from query timestamps
+    const qDate = (q.assistantTimestamp || q.userTimestamp || '').split('T')[0] || s.date;
+    if (qDate && qDate !== 'unknown') {
+      if (!dailyBreakdown[qDate]) dailyBreakdown[qDate] = { tokens: 0, cost: 0, queries: 0 };
+      dailyBreakdown[qDate].tokens += q.totalTokens || 0;
+      dailyBreakdown[qDate].cost += q.cost || 0;
+      dailyBreakdown[qDate].queries += 1;
+    }
   }
+  const lastQuery = s.queries[s.queries.length - 1];
+  const lastDate = (lastQuery.assistantTimestamp || lastQuery.userTimestamp || '').split('T')[0] || s.date;
   const { queries, ...rest } = s;
-  return { ...rest, _models: models, _tools: tools, _hasToolCall: hasToolCall };
+  return { ...rest, lastDate, _models: models, _tools: tools, _hasToolCall: hasToolCall, _dailyBreakdown: dailyBreakdown };
 }
 
 function filterSessions(sessions, from, to) {
   return sessions.filter(s => {
     if (!s.date || s.date === 'unknown') return false;
-    if (from && s.date < from) return false;
+    // Use daily breakdown if available — include session if any day falls in range
+    if (s._dailyBreakdown) {
+      const days = Object.keys(s._dailyBreakdown);
+      return days.some(d => (!from || d >= from) && (!to || d <= to));
+    }
+    // Fallback: use session date range (date to lastDate)
+    const end = s.lastDate || s.date;
+    if (from && end < from) return false;
     if (to && s.date > to) return false;
     return true;
   });

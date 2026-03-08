@@ -267,19 +267,26 @@ async function parseAllSessions() {
         cost,
       });
 
-      // Daily
-      if (date !== 'unknown') {
-        if (!dailyMap[date]) {
-          dailyMap[date] = { date, inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 0, cost: 0, sessions: 0, queries: 0 };
+      // Daily — attribute each query's tokens to the day it actually happened
+      const sessionDays = new Set();
+      for (const q of queries) {
+        const qDate = (q.assistantTimestamp || q.userTimestamp || '').split('T')[0] || date;
+        if (qDate === 'unknown' || !qDate) continue;
+        if (!dailyMap[qDate]) {
+          dailyMap[qDate] = { date: qDate, inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 0, cost: 0, sessions: 0, queries: 0 };
         }
-        dailyMap[date].inputTokens += inputTokens;
-        dailyMap[date].outputTokens += outputTokens;
-        dailyMap[date].cacheCreationTokens += cacheCreationTokens;
-        dailyMap[date].cacheReadTokens += cacheReadTokens;
-        dailyMap[date].totalTokens += totalTokens;
-        dailyMap[date].cost += cost;
-        dailyMap[date].sessions += 1;
-        dailyMap[date].queries += queries.length;
+        dailyMap[qDate].inputTokens += q.inputTokens;
+        dailyMap[qDate].outputTokens += q.outputTokens;
+        dailyMap[qDate].cacheCreationTokens += q.cacheCreationTokens;
+        dailyMap[qDate].cacheReadTokens += q.cacheReadTokens;
+        dailyMap[qDate].totalTokens += q.totalTokens;
+        dailyMap[qDate].cost += q.cost;
+        dailyMap[qDate].queries += 1;
+        sessionDays.add(qDate);
+      }
+      // Count session once per day it was active
+      for (const d of sessionDays) {
+        dailyMap[d].sessions += 1;
       }
 
       // Model
