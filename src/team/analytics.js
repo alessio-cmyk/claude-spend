@@ -290,24 +290,22 @@ function getProductivityAnalytics(fromDate, toDate) {
 function getWeekOverWeekDeltas() {
   const allDevs = loadAllDevelopers();
 
-  // Get current ISO week boundaries (Mon-Sun)
+  // Rolling 7 days vs prior 7 days
   const now = new Date();
-  const dayOfWeek = now.getDay() || 7; // Mon=1..Sun=7
-  const thisMonday = new Date(now);
-  thisMonday.setDate(now.getDate() - dayOfWeek + 1);
-  thisMonday.setHours(0, 0, 0, 0);
-  const thisSunday = new Date(thisMonday);
-  thisSunday.setDate(thisMonday.getDate() + 6);
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
 
-  const lastMonday = new Date(thisMonday);
-  lastMonday.setDate(thisMonday.getDate() - 7);
-  const lastSunday = new Date(thisMonday);
-  lastSunday.setDate(thisMonday.getDate() - 1);
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(today.getDate() - 6); // includes today = 7 days
+  const fourteenDaysAgo = new Date(today);
+  fourteenDaysAgo.setDate(today.getDate() - 13);
+  const eightDaysAgo = new Date(today);
+  eightDaysAgo.setDate(today.getDate() - 7);
 
-  const thisFrom = thisMonday.toISOString().split('T')[0];
-  const thisTo = thisSunday.toISOString().split('T')[0];
-  const lastFrom = lastMonday.toISOString().split('T')[0];
-  const lastTo = lastSunday.toISOString().split('T')[0];
+  const thisFrom = sevenDaysAgo.toISOString().split('T')[0];
+  const thisTo = today.toISOString().split('T')[0];
+  const lastFrom = fourteenDaysAgo.toISOString().split('T')[0];
+  const lastTo = eightDaysAgo.toISOString().split('T')[0];
 
   function calcPct(current, previous) {
     if (previous === 0 && current > 0) return 100;

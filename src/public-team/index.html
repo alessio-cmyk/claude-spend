@@ -557,7 +557,7 @@ function renderLeaderboard() {
     const ts = ws.teamSummary;
     const weekLabel = formatDate(ws.weekStart) + '–' + formatDate(ws.weekEnd);
     const dir = ts.queriesPct > 0 ? 'up' : ts.queriesPct < 0 ? 'down' : 'flat';
-    wowBannerHtml = `<div class="wow-banner animate delay-2">Week of ${weekLabel} · Team prompts ${dir} ${Math.abs(ts.queriesPct)}% vs last week · ${ts.devsMoreActive} of ${ts.totalDevs} devs more active</div>`;
+    wowBannerHtml = `<div class="wow-banner animate delay-2">Last 7 days (${weekLabel}) · Team prompts ${dir} ${Math.abs(ts.queriesPct)}% vs prior 7 days · ${ts.devsMoreActive} of ${ts.totalDevs} devs more active</div>`;
   }
 
   /* === FEATURE 4b: Build inactivity map for recency dots === */
@@ -591,7 +591,7 @@ function renderLeaderboard() {
         let wowCell = '<span class="wow-stable">— stable</span>';
         let wowTooltip = '';
         if (wow) {
-          wowTooltip = 'Prompts: ' + wow.queries.current + ' this week vs ' + wow.queries.previous + ' last week (' + (wow.queries.delta>=0?'+':'') + wow.queries.delta + ' / ' + (wowPct>=0?'+':'') + wowPct + '%)';
+          wowTooltip = 'Prompts: ' + wow.queries.current + ' last 7d vs ' + wow.queries.previous + ' prior 7d (' + (wow.queries.delta>=0?'+':'') + wow.queries.delta + ' / ' + (wowPct>=0?'+':'') + wowPct + '%)';
           if (wowPct >= 10) wowCell = '<span class="wow-up">&#9650; +' + Math.abs(wowPct) + '%</span>';
           else if (wowPct <= -10) wowCell = '<span class="wow-down">&#9660; -' + Math.abs(wowPct) + '%</span>';
         }

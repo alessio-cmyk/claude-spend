@@ -682,7 +682,7 @@ function renderDevDetail(d, allDevs) {
       { l: 'Cost', curr: '$' + wow.cost.current, prev: '$' + wow.cost.previous, pct: wow.cost.pct },
     ];
     wowHtml = `<div style="margin-top:16px;padding:14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:#FAFBFC">
-      <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);margin-bottom:10px">Week-over-Week Change</h4>
+      <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);margin-bottom:10px">7-Day Rolling Change</h4>
       <div style="display:flex;gap:24px;flex-wrap:wrap">${items.map(i => {
         const color = i.pct > 0 ? 'var(--emerald)' : i.pct < 0 ? 'var(--rose)' : 'var(--text-tertiary)';
         return `<div><span style="font-size:11px;color:var(--text-tertiary);font-weight:600">${i.l}</span><br>
