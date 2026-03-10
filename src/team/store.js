@@ -326,10 +326,15 @@ function compactSession(s) {
     if (hasPromptFlags) {
       isPrompt = !!q.isNewPrompt;
     } else if (q.userPrompt !== null && q.userPrompt !== undefined && q.userPrompt !== lastUserPrompt) {
-      // Infer: new prompt when userPrompt text changes (null = tool_result, not a human prompt)
-      isPrompt = true;
-      lastUserPrompt = q.userPrompt;
-      inferredPromptCount++;
+      // Filter out system messages that aren't real human prompts
+      const p = q.userPrompt;
+      const isSystem = p.startsWith('<task-notification>') ||
+        p.startsWith('This session is being continued from a previous conversation');
+      if (!isSystem) {
+        isPrompt = true;
+        lastUserPrompt = q.userPrompt;
+        inferredPromptCount++;
+      }
     }
     // Per-day breakdown from query timestamps
     const qDate = (q.assistantTimestamp || q.userTimestamp || '').split('T')[0] || s.date;
