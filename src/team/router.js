@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { saveDeveloper, loadDeveloper, listDevelopers, filterSessions, computeTotalsFromDaily, snapshotHealthHistory, loadHealthHistory, recompactFromArchive } = require('./store');
+const { saveDeveloper, loadDeveloper, listDevelopers, filterSessions, computeTotalsFromDaily, snapshotHealthHistory, loadHealthHistory, recompactFromArchive, getArchivedSessionIds } = require('./store');
 const { getProductivityAnalytics, getWeekOverWeekDeltas, getInactivityStatus } = require('./analytics');
 const { uploadFile } = require('./s3');
 
@@ -230,7 +230,12 @@ function createTeamRouter() {
         totals = computeTotalsFromDaily(dailyUsage, sessions);
       }
 
-      res.json({ ...data, sessions, totals, dailyUsage });
+      const result = { ...data, sessions, totals, dailyUsage };
+      // Include archived session IDs for sync client to detect archive gaps
+      if (req.query.archived === '1') {
+        result._archivedSessionIds = [...getArchivedSessionIds(req.params.devId)];
+      }
+      res.json(result);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

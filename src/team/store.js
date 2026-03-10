@@ -603,8 +603,23 @@ async function recompactFromArchive(devId) {
   }
 }
 
+function getArchivedSessionIds(devId) {
+  const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+  const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
+  const ids = new Set();
+  try {
+    if (fs.existsSync(archivePath)) {
+      for (const line of fs.readFileSync(archivePath, 'utf-8').split('\n').filter(Boolean)) {
+        try { ids.add(JSON.parse(line).sessionId); } catch {}
+      }
+    }
+  } catch {}
+  return ids;
+}
+
 module.exports = {
   saveDeveloper, loadDeveloper, listDevelopers, loadAllDevelopers,
   computeTotals, computeTotalsFromDaily, computeDailyUsage, filterSessions,
   snapshotHealthHistory, loadHealthHistory, dedupArchives, recompactFromArchive,
+  getArchivedSessionIds,
 };

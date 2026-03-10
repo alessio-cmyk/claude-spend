@@ -30,12 +30,17 @@ function httpRequest(url, options, payload) {
 
 async function fetchServerSessions(serverUrl, devId) {
   try {
-    const url = new URL('/api/team/dev/' + encodeURIComponent(devId), serverUrl);
+    const url = new URL('/api/team/dev/' + encodeURIComponent(devId) + '?archived=1', serverUrl);
     const data = await httpRequest(url, { method: 'GET', timeout: 15000 });
-    // Return map of sessionId -> { queryCount, promptCount } for diff logic
+    const archivedIds = new Set(data._archivedSessionIds || []);
+    // Return map of sessionId -> { queryCount, promptCount, archived } for diff logic
     const map = new Map();
     for (const s of (data.sessions || [])) {
-      map.set(s.sessionId, { queryCount: s.queryCount || 0, promptCount: s.promptCount || 0 });
+      map.set(s.sessionId, {
+        queryCount: s.queryCount || 0,
+        promptCount: s.promptCount || 0,
+        archived: archivedIds.has(s.sessionId),
+      });
     }
     return map;
   } catch {
@@ -54,6 +59,8 @@ async function syncToTeam(serverUrl, devId, parsedData, apiKey) {
       if (!server) return true; // new session
       // Resend if server version needs recompact (missing promptCount)
       if (!server.promptCount && s.queries && s.queries.length > 0) return true;
+      // Resend if server archive is missing this session's queries
+      if (!server.archived && s.queries && s.queries.length > 0) return true;
       return false;
     });
   }
