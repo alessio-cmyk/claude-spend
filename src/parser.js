@@ -113,10 +113,16 @@ function extractSessionData(entries) {
         + (outputTokens * pricing.output);
 
       const tools = [];
+      let assistantResponse = null;
       if (Array.isArray(entry.message.content)) {
+        const textParts = [];
         for (const block of entry.message.content) {
           if (block && block.type === 'tool_use' && typeof block.name === 'string') tools.push(block.name);
+          if (block && block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
+            textParts.push(block.text);
+          }
         }
+        if (textParts.length > 0) assistantResponse = textParts.join('\n').trim();
       }
 
       const isNewPrompt = pendingUserMessage !== null && pendingUserMessage !== lastConsumedMessage;
@@ -125,6 +131,7 @@ function extractSessionData(entries) {
       queries.push({
         userPrompt: pendingUserMessage?.text || null,
         userTimestamp: pendingUserMessage?.timestamp || null,
+        assistantResponse,
         assistantTimestamp: entry.timestamp,
         isNewPrompt,
         model,
