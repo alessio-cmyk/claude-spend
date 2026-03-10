@@ -85,18 +85,40 @@ async function saveDeveloper(devId, data, timezone) {
         console.log(`[archive] Rebuilt ${safe}.jsonl: ${toArchive.length} sessions`);
       }
     } else {
-      // Normal: archive only new queries
+      // Build set of session IDs already in the archive
+      const archivedSessionIds = new Set();
+      try {
+        if (fs.existsSync(archivePath)) {
+          for (const line of fs.readFileSync(archivePath, 'utf-8').split('\n').filter(Boolean)) {
+            try { archivedSessionIds.add(JSON.parse(line).sessionId); } catch {}
+          }
+        }
+      } catch {}
+
+      // Normal: archive new queries + sessions missing from archive
       for (const s of rawNewSessions) {
         if (s.queries && s.queries.length > 0) toArchive.push(s);
       }
       for (const s of updatedSessions) {
         if (s.queries && s.queries.length > 0) {
-          const prev = existing.sessions.find(p => p.sessionId === s.sessionId);
-          const prevCount = prev ? (prev.queryCount || 0) : 0;
-          const newQueries = s.queries.slice(prevCount);
-          if (newQueries.length > 0) {
-            toArchive.push({ ...s, queries: newQueries });
+          if (!archivedSessionIds.has(s.sessionId)) {
+            // Session missing from archive entirely — archive all queries
+            toArchive.push(s);
+          } else {
+            const prev = existing.sessions.find(p => p.sessionId === s.sessionId);
+            const prevCount = prev ? (prev.queryCount || 0) : 0;
+            const newQueries = s.queries.slice(prevCount);
+            if (newQueries.length > 0) {
+              toArchive.push({ ...s, queries: newQueries });
+            }
           }
+        }
+      }
+      // Also archive any incoming session with queries that's missing from the archive
+      for (const s of (data.sessions || [])) {
+        if (s.queries && s.queries.length > 0 && !archivedSessionIds.has(s.sessionId) &&
+            !toArchive.find(a => a.sessionId === s.sessionId)) {
+          toArchive.push(s);
         }
       }
       if (toArchive.length > 0) {
