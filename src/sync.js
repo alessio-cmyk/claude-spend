@@ -15,7 +15,10 @@ function httpRequest(url, options, payload) {
           const json = JSON.parse(body);
           if (res.statusCode >= 400) reject(new Error(json.error || 'Server error ' + res.statusCode));
           else resolve(json);
-        } catch { reject(new Error('Invalid response from server')); }
+        } catch {
+          const preview = (body || '').substring(0, 200);
+          reject(new Error(`Invalid response from server (HTTP ${res.statusCode}, ${body.length} bytes): ${preview}`));
+        }
       });
     });
     req.on('error', reject);
@@ -25,15 +28,39 @@ function httpRequest(url, options, payload) {
   });
 }
 
+async function fetchServerSessionIds(serverUrl, devId) {
+  try {
+    const url = new URL('/api/team/dev/' + encodeURIComponent(devId), serverUrl);
+    const data = await httpRequest(url, { method: 'GET', timeout: 15000 });
+    return new Set((data.sessions || []).map(s => s.sessionId));
+  } catch {
+    return new Set(); // Server doesn't have this dev yet, send everything
+  }
+}
+
 async function syncToTeam(serverUrl, devId, parsedData, apiKey) {
-  const body = { devId, data: parsedData };
+  // Incremental sync: only send sessions the server doesn't have or that grew
+  const serverIds = await fetchServerSessionIds(serverUrl, devId);
+  let sessions = parsedData.sessions || [];
+  const totalSessions = sessions.length;
+  if (serverIds.size > 0) {
+    sessions = sessions.filter(s => !serverIds.has(s.sessionId));
+  }
+
+  const body = { devId, data: { ...parsedData, sessions } };
   if (apiKey) body.key = apiKey;
   try { body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch {}
   const payload = JSON.stringify(body);
-  const url = new URL('/api/team/sync', serverUrl);
+  const sizeMB = (Buffer.byteLength(payload) / 1024 / 1024).toFixed(1);
 
+  if (sessions.length < totalSessions) {
+    process.stdout.write(`  Incremental sync: ${sessions.length} new sessions (${sizeMB}MB), ${serverIds.size} already on server\n`);
+  }
+
+  const url = new URL('/api/team/sync', serverUrl);
   return httpRequest(url, {
     method: 'POST',
+    timeout: 120000,
     headers: {
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(payload),
