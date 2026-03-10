@@ -28,44 +28,79 @@ function httpRequest(url, options, payload) {
   });
 }
 
-async function fetchServerSessionIds(serverUrl, devId) {
+async function fetchServerSessions(serverUrl, devId) {
   try {
     const url = new URL('/api/team/dev/' + encodeURIComponent(devId), serverUrl);
     const data = await httpRequest(url, { method: 'GET', timeout: 15000 });
-    return new Set((data.sessions || []).map(s => s.sessionId));
+    // Return map of sessionId -> { queryCount, promptCount } for diff logic
+    const map = new Map();
+    for (const s of (data.sessions || [])) {
+      map.set(s.sessionId, { queryCount: s.queryCount || 0, promptCount: s.promptCount || 0 });
+    }
+    return map;
   } catch {
-    return new Set(); // Server doesn't have this dev yet, send everything
+    return new Map(); // Server doesn't have this dev yet, send everything
   }
 }
 
 async function syncToTeam(serverUrl, devId, parsedData, apiKey) {
-  // Incremental sync: only send sessions the server doesn't have or that grew
-  const serverIds = await fetchServerSessionIds(serverUrl, devId);
+  // Incremental sync: only send new sessions or those needing recompact
+  const serverMap = await fetchServerSessions(serverUrl, devId);
   let sessions = parsedData.sessions || [];
   const totalSessions = sessions.length;
-  if (serverIds.size > 0) {
-    sessions = sessions.filter(s => !serverIds.has(s.sessionId));
+  if (serverMap.size > 0) {
+    sessions = sessions.filter(s => {
+      const server = serverMap.get(s.sessionId);
+      if (!server) return true; // new session
+      // Resend if server version needs recompact (missing promptCount)
+      if (!server.promptCount && s.queries && s.queries.length > 0) return true;
+      return false;
+    });
   }
-
-  const body = { devId, data: { ...parsedData, sessions } };
-  if (apiKey) body.key = apiKey;
-  try { body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch {}
-  const payload = JSON.stringify(body);
-  const sizeMB = (Buffer.byteLength(payload) / 1024 / 1024).toFixed(1);
 
   if (sessions.length < totalSessions) {
-    process.stdout.write(`  Incremental sync: ${sessions.length} new sessions (${sizeMB}MB), ${serverIds.size} already on server\n`);
+    process.stdout.write(`  Incremental sync: ${sessions.length} new of ${totalSessions} sessions, ${serverMap.size} on server\n`);
   }
 
-  const url = new URL('/api/team/sync', serverUrl);
-  return httpRequest(url, {
-    method: 'POST',
-    timeout: 120000,
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(payload),
-    },
-  }, payload);
+  // Batch uploads to stay under server payload limit (~40MB safe)
+  const MAX_BATCH_BYTES = 40 * 1024 * 1024;
+  const batches = [[]];
+  let batchSize = 0;
+  for (const s of sessions) {
+    const sSize = JSON.stringify(s).length;
+    if (batchSize + sSize > MAX_BATCH_BYTES && batches[batches.length - 1].length > 0) {
+      batches.push([]);
+      batchSize = 0;
+    }
+    batches[batches.length - 1].push(s);
+    batchSize += sSize;
+  }
+
+  let lastResult;
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i];
+    const body = { devId, data: { ...parsedData, sessions: batch } };
+    if (apiKey) body.key = apiKey;
+    try { body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch {}
+    const payload = JSON.stringify(body);
+    const sizeMB = (Buffer.byteLength(payload) / 1024 / 1024).toFixed(1);
+
+    if (batches.length > 1) {
+      process.stdout.write(`  Batch ${i + 1}/${batches.length}: ${batch.length} sessions (${sizeMB}MB)\n`);
+    }
+
+    const url = new URL('/api/team/sync', serverUrl);
+    lastResult = await httpRequest(url, {
+      method: 'POST',
+      timeout: 120000,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+      },
+    }, payload);
+  }
+
+  return lastResult || { ok: true, devId, sessionCount: serverMap.size };
 }
 
 async function resolveDevId(serverUrl, apiKey) {
