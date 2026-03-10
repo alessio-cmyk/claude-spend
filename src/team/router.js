@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { saveDeveloper, loadDeveloper, listDevelopers, filterSessions, computeTotalsFromDaily, snapshotHealthHistory, loadHealthHistory } = require('./store');
+const { saveDeveloper, loadDeveloper, listDevelopers, filterSessions, computeTotalsFromDaily, snapshotHealthHistory, loadHealthHistory, recompactFromArchive } = require('./store');
 const { getProductivityAnalytics, getWeekOverWeekDeltas, getInactivityStatus } = require('./analytics');
 const { uploadFile } = require('./s3');
 
@@ -490,6 +490,32 @@ function createTeamRouter() {
     });
     const corrupted = results.filter(r => r.status !== 'ok').length;
     res.json({ corrupted, total: results.length, devs: results });
+  });
+
+  // POST /api/team/admin/recompact - Recompact a dev's sessions from archive JSONL
+  router.post('/admin/recompact', express.json(), async (req, res) => {
+    if (!checkAdmin(req, res)) return;
+    const { devId } = req.body;
+    if (!devId) {
+      // Recompact all devs
+      const devs = listDevelopers();
+      const results = [];
+      for (const d of devs) {
+        try {
+          const r = await recompactFromArchive(d.devId);
+          results.push({ devId: d.devId, ...r });
+        } catch (err) {
+          results.push({ devId: d.devId, error: err.message });
+        }
+      }
+      return res.json({ ok: true, results });
+    }
+    try {
+      const result = await recompactFromArchive(devId);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // GET /api/team/project-tags

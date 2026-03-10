@@ -301,10 +301,14 @@ function compactSession(s) {
     // Already compacted or no queries
     return { ...s, queries: undefined };
   }
+  // Check if isNewPrompt flags are available (parser v2+)
+  const hasPromptFlags = s.queries.some(q => q.isNewPrompt !== undefined);
   const tools = {};
   const models = {};
   const dailyBreakdown = {};
   let hasToolCall = false;
+  let lastUserPrompt = null; // for inferring prompts when isNewPrompt missing
+  let inferredPromptCount = 0;
   for (const q of s.queries) {
     const m = q.model || 'unknown';
     if (m !== '<synthetic>' && m !== 'unknown') {
@@ -317,6 +321,16 @@ function compactSession(s) {
       tools[t] = (tools[t] || 0) + 1;
       hasToolCall = true;
     }
+    // Determine if this query represents a new prompt
+    let isPrompt = false;
+    if (hasPromptFlags) {
+      isPrompt = !!q.isNewPrompt;
+    } else if (q.userPrompt !== null && q.userPrompt !== undefined && q.userPrompt !== lastUserPrompt) {
+      // Infer: new prompt when userPrompt text changes (null = tool_result, not a human prompt)
+      isPrompt = true;
+      lastUserPrompt = q.userPrompt;
+      inferredPromptCount++;
+    }
     // Per-day breakdown from query timestamps
     const qDate = (q.assistantTimestamp || q.userTimestamp || '').split('T')[0] || s.date;
     if (qDate && qDate !== 'unknown') {
@@ -324,12 +338,14 @@ function compactSession(s) {
       dailyBreakdown[qDate].tokens += q.totalTokens || 0;
       dailyBreakdown[qDate].cost += q.cost || 0;
       dailyBreakdown[qDate].queries += 1;
-      if (q.isNewPrompt) dailyBreakdown[qDate].prompts += 1;
+      if (isPrompt) dailyBreakdown[qDate].prompts += 1;
     }
   }
   const lastQuery = s.queries[s.queries.length - 1];
   const lastDate = (lastQuery.assistantTimestamp || lastQuery.userTimestamp || '').split('T')[0] || s.date;
-  const promptCount = s.queries.filter(q => q.isNewPrompt).length;
+  const promptCount = hasPromptFlags
+    ? s.queries.filter(q => q.isNewPrompt).length
+    : inferredPromptCount;
   const { queries, ...rest } = s;
   return { ...rest, promptCount, lastDate, _models: models, _tools: tools, _hasToolCall: hasToolCall, _dailyBreakdown: dailyBreakdown };
 }
@@ -478,8 +494,90 @@ function computeTotalsFromDaily(dailyUsage, sessions) {
   };
 }
 
+async function recompactFromArchive(devId) {
+  const release = await acquireLock('dev:' + devId);
+  try {
+    ensureDir();
+    const fp = devPath(devId);
+    if (!fs.existsSync(fp)) return { error: 'Developer not found' };
+
+    const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
+    if (!fs.existsSync(archivePath)) return { error: 'No archive found for ' + devId };
+
+    // Parse archive: group all queries by sessionId
+    const lines = fs.readFileSync(archivePath, 'utf-8').trim().split('\n').filter(Boolean);
+    const archiveSessions = new Map(); // sessionId -> { meta, queries[] }
+    for (const line of lines) {
+      try {
+        const s = JSON.parse(line);
+        const sid = s.sessionId;
+        if (!archiveSessions.has(sid)) {
+          const { queries, ...meta } = s;
+          archiveSessions.set(sid, { meta, queries: [] });
+        }
+        const entry = archiveSessions.get(sid);
+        // Keep most complete metadata
+        if ((s.queryCount || 0) > (entry.meta.queryCount || 0)) {
+          const { queries, ...meta } = s;
+          entry.meta = meta;
+        }
+        // Collect all queries (dedup by timestamp)
+        const seen = new Set(entry.queries.map(q => (q.userTimestamp || '') + '|' + (q.assistantTimestamp || '')));
+        for (const q of (s.queries || [])) {
+          const key = (q.userTimestamp || '') + '|' + (q.assistantTimestamp || '');
+          if (key !== '|' && seen.has(key)) continue;
+          seen.add(key);
+          entry.queries.push(q);
+        }
+      } catch {}
+    }
+
+    // Load existing dev data
+    const existing = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+    const existingMap = new Map((existing.sessions || []).map(s => [s.sessionId, s]));
+
+    // Recompact from archive where existing session lacks promptCount
+    let recompacted = 0;
+    for (const [sid, { meta, queries }] of archiveSessions) {
+      const prev = existingMap.get(sid);
+      if (!prev) continue; // archive-only session not in current data, skip
+      if (prev.promptCount && prev._dailyBreakdown) continue; // already good
+
+      // Build full session with queries for compaction
+      const full = { ...meta, queries: queries.sort((a, b) =>
+        (a.userTimestamp || '').localeCompare(b.userTimestamp || ''))
+      };
+      full.queryCount = queries.length;
+      existingMap.set(sid, compactSession(full));
+      recompacted++;
+    }
+
+    if (recompacted === 0) return { ok: true, recompacted: 0, message: 'All sessions already have promptCount' };
+
+    const merged = [...existingMap.values()];
+    const result = {
+      ...existing,
+      sessions: merged,
+      totals: computeTotals(merged),
+      dailyUsage: computeDailyUsage(merged),
+      lastSync: existing.lastSync,
+    };
+
+    const tmpPath = fp + '.tmp.' + process.pid;
+    fs.writeFileSync(tmpPath, JSON.stringify(result));
+    fs.renameSync(tmpPath, fp);
+    uploadFile(fp);
+    invalidateDevCache();
+
+    return { ok: true, recompacted, totalSessions: merged.length, totalPrompts: result.totals.totalPrompts };
+  } finally {
+    release();
+  }
+}
+
 module.exports = {
   saveDeveloper, loadDeveloper, listDevelopers, loadAllDevelopers,
   computeTotals, computeTotalsFromDaily, computeDailyUsage, filterSessions,
-  snapshotHealthHistory, loadHealthHistory, dedupArchives,
+  snapshotHealthHistory, loadHealthHistory, dedupArchives, recompactFromArchive,
 };
