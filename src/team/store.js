@@ -57,17 +57,23 @@ async function saveDeveloper(devId, data, timezone) {
     const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
     const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
 
-    // Check if archive needs full rebuild (corrupted by bad dedup)
+    // Read archive once — extract session IDs and check integrity in a single pass
     let needsFullRebuild = false;
+    const archivedSessionIds = new Set();
     try {
       if (fs.existsSync(archivePath)) {
-        const archiveLines = fs.readFileSync(archivePath, 'utf-8').trim().split('\n').filter(Boolean);
-        const archivedQueries = archiveLines.reduce((sum, l) => {
-          try { return sum + (JSON.parse(l).queries || []).length; } catch { return sum; }
-        }, 0);
-        // Corrupted if avg queries/entry ≤ 2 (healthy archives have dozens+)
-        const avgPerEntry = archiveLines.length > 0 ? archivedQueries / archiveLines.length : 0;
-        needsFullRebuild = archiveLines.length > 0 && avgPerEntry <= 2;
+        let lineCount = 0, totalQueries = 0;
+        for (const line of fs.readFileSync(archivePath, 'utf-8').split('\n')) {
+          if (!line) continue;
+          try {
+            const parsed = JSON.parse(line);
+            archivedSessionIds.add(parsed.sessionId);
+            totalQueries += (parsed.queries || []).length;
+            lineCount++;
+          } catch {}
+        }
+        const avgPerEntry = lineCount > 0 ? totalQueries / lineCount : 0;
+        needsFullRebuild = lineCount > 0 && avgPerEntry <= 2;
       }
     } catch {}
 
@@ -85,15 +91,6 @@ async function saveDeveloper(devId, data, timezone) {
         console.log(`[archive] Rebuilt ${safe}.jsonl: ${toArchive.length} sessions`);
       }
     } else {
-      // Build set of session IDs already in the archive
-      const archivedSessionIds = new Set();
-      try {
-        if (fs.existsSync(archivePath)) {
-          for (const line of fs.readFileSync(archivePath, 'utf-8').split('\n').filter(Boolean)) {
-            try { archivedSessionIds.add(JSON.parse(line).sessionId); } catch {}
-          }
-        }
-      } catch {}
 
       // Normal: archive new queries + sessions missing from archive
       for (const s of rawNewSessions) {

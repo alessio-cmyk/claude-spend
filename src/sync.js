@@ -69,13 +69,15 @@ async function syncToTeam(serverUrl, devId, parsedData, apiKey) {
     process.stdout.write(`  Incremental sync: ${sessions.length} new of ${totalSessions} sessions, ${serverMap.size} on server\n`);
   }
 
-  // Batch uploads to stay under server payload limit (~40MB safe)
-  const MAX_BATCH_BYTES = 40 * 1024 * 1024;
+  // Batch uploads: cap both size and session count to avoid gateway timeouts
+  const MAX_BATCH_BYTES = 10 * 1024 * 1024; // 10MB per batch (safe for proxy timeouts)
+  const MAX_BATCH_SESSIONS = 50;
   const batches = [[]];
   let batchSize = 0;
   for (const s of sessions) {
     const sSize = JSON.stringify(s).length;
-    if (batchSize + sSize > MAX_BATCH_BYTES && batches[batches.length - 1].length > 0) {
+    if ((batchSize + sSize > MAX_BATCH_BYTES || batches[batches.length - 1].length >= MAX_BATCH_SESSIONS)
+        && batches[batches.length - 1].length > 0) {
       batches.push([]);
       batchSize = 0;
     }
