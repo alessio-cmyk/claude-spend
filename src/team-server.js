@@ -97,7 +97,8 @@ async function start() {
     res.sendFile(path.join(__dirname, 'public-team', 'index.html'));
   });
 
-  const server = app.listen(port, () => {
+  const host = process.env.HOST || '0.0.0.0';
+  const server = app.listen(port, host, () => {
     console.log(`\n  claude-spend team server running at http://localhost:${port}`);
     console.log(`  Leaderboard:  http://localhost:${port}`);
     console.log(`  API:          http://localhost:${port}/api/team/leaderboard`);
