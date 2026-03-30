@@ -57,6 +57,9 @@ async function syncToTeam(serverUrl, devId, parsedData, apiKey) {
     sessions = sessions.filter(s => {
       const server = serverMap.get(s.sessionId);
       if (!server) return true; // new session
+      // Resend if local has more queries than server (session grew since last sync)
+      const localQueries = s.queryCount || (s.queries && s.queries.length) || 0;
+      if (localQueries > server.queryCount) return true;
       // Resend if server version needs recompact (missing promptCount)
       if (!server.promptCount && s.queries && s.queries.length > 0) return true;
       // Resend if server archive is missing this session's queries
