@@ -16,7 +16,7 @@ const express = require('express');
 const http = require('http');
 const https = require('https');
 const { createTeamRouter } = require('./team/router');
-const { isEnabled: s3Enabled, downloadAll } = require('./team/s3');
+const { isEnabled: s3Enabled, downloadCore, downloadArchives } = require('./team/s3');
 
 const args = process.argv.slice(2);
 const portIndex = args.indexOf('--port');
@@ -67,9 +67,13 @@ async function start() {
   // Download data from S3 before starting (App Runner has ephemeral storage)
   console.log(`[Boot] S3_BUCKET=${process.env.S3_BUCKET || '(not set)'}, S3 enabled=${s3Enabled()}`);
   console.log(`[Boot] CLAUDE_SPEND_DATA=${process.env.CLAUDE_SPEND_DATA || '(not set)'}, cwd=${process.cwd()}`);
+  // Only the small per-dev summary JSONs are needed to serve the dashboard, so we
+  // block startup on those alone. The large archive JSONLs (100s of MB) are loaded
+  // in the background after the server is listening — otherwise the boot-time download
+  // blocks the port for minutes and App Runner's health check kills the instance.
   if (s3Enabled()) {
-    try { await downloadAll(); }
-    catch (err) { console.error('[S3] Initial download failed:', err.message); }
+    try { await downloadCore(); }
+    catch (err) { console.error('[S3] Initial core download failed:', err.message); }
   }
 
   // Pull from remote server if --pull <url> specified
@@ -104,6 +108,13 @@ async function start() {
     console.log(`  API:          http://localhost:${port}/api/team/leaderboard`);
     if (s3Enabled()) console.log(`  S3:           s3://${process.env.S3_BUCKET}/${process.env.S3_PREFIX || 'team/'}`);
     console.log();
+
+    // Hydrate archives in the background now that the server is accepting connections.
+    if (s3Enabled()) {
+      downloadArchives()
+        .then(n => { if (n) console.log(`[S3] Background archive hydration complete (${n} file(s))`); })
+        .catch(err => console.error('[S3] Background archive download failed:', err.message));
+    }
   });
 
   server.on('error', (err) => {

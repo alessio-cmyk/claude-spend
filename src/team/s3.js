@@ -42,13 +42,20 @@ function uploadFile(filePath) {
   });
 }
 
-// Download all files from S3 to local data dir
-async function downloadAll() {
-  if (!isEnabled()) return;
+// A relative key (key minus prefix) is an "archive" file if it lives under archive/.
+// Archives are large (100s of MB) and only needed for backfill / conversation history,
+// not for serving the leaderboard or productivity API.
+function isArchiveRel(rel) {
+  return rel.startsWith('archive/');
+}
+
+// Download files from S3 to the local data dir, restricted by a relative-key filter.
+async function downloadFiltered(filterRel, label) {
+  if (!isEnabled()) return 0;
   const bucket = getBucket();
   const prefix = getPrefix();
   const dataDir = getDataDir();
-  console.log(`[S3] Downloading data from s3://${bucket}/${prefix} ...`);
+  console.log(`[S3] Downloading ${label} from s3://${bucket}/${prefix} ...`);
 
   const s3 = getClient();
   let continuationToken;
@@ -61,10 +68,12 @@ async function downloadAll() {
       ContinuationToken: continuationToken,
     }));
 
-    const objects = (res.Contents || []).filter(obj => obj.Key.slice(prefix.length));
+    const objects = (res.Contents || []).filter(obj => {
+      const rel = obj.Key.slice(prefix.length);
+      return rel && filterRel(rel);
+    });
     await Promise.all(objects.map(async (obj) => {
       const rel = obj.Key.slice(prefix.length);
-      if (!rel) return;
       const localPath = path.join(dataDir, rel);
       fs.mkdirSync(path.dirname(localPath), { recursive: true });
 
@@ -81,7 +90,23 @@ async function downloadAll() {
     continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
   } while (continuationToken);
 
-  console.log(`[S3] Downloaded ${count} files`);
+  console.log(`[S3] Downloaded ${count} ${label} file(s)`);
+  return count;
+}
+
+// Download all files (core + archives). Kept for seeding / one-shot tools.
+async function downloadAll() {
+  return downloadFiltered(() => true, 'all data');
+}
+
+// Download only the small per-dev summary JSONs needed to serve the dashboard.
+async function downloadCore() {
+  return downloadFiltered(rel => !isArchiveRel(rel), 'core data');
+}
+
+// Download only the large archive JSONLs (backfill / conversation history).
+async function downloadArchives() {
+  return downloadFiltered(isArchiveRel, 'archives');
 }
 
 // Upload all local files to S3 (for initial seeding)
@@ -122,4 +147,4 @@ async function uploadAll() {
   console.log(`[S3] Uploaded ${count} files`);
 }
 
-module.exports = { isEnabled, uploadFile, downloadAll, uploadAll };
+module.exports = { isEnabled, uploadFile, downloadAll, downloadCore, downloadArchives, uploadAll };
