@@ -600,6 +600,35 @@ async function recompactFromArchive(devId) {
   }
 }
 
+// Read a dev's archive and return Map<sessionId, string[]> of distinct user prompts in order.
+// The archive is the only place full per-query prompts survive compaction.
+function loadArchivePrompts(devId) {
+  const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+  const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
+  const bySession = new Map();
+  try {
+    if (!fs.existsSync(archivePath)) return bySession;
+    for (const line of fs.readFileSync(archivePath, 'utf-8').split('\n').filter(Boolean)) {
+      let s;
+      try { s = JSON.parse(line); } catch { continue; }
+      if (!s.sessionId || !Array.isArray(s.queries)) continue;
+      let entry = bySession.get(s.sessionId);
+      if (!entry) { entry = { prompts: [], seen: new Set() }; bySession.set(s.sessionId, entry); }
+      for (const q of s.queries) {
+        const p = (q.userPrompt || '').trim();
+        if (!p || entry.seen.has(p)) continue;
+        // Skip system-injected wrappers (<ide_opened_file>, <command-name>, <system-reminder>, ...)
+        if (p.startsWith('<') && p.includes('>')) continue;
+        entry.seen.add(p);
+        entry.prompts.push(p);
+      }
+    }
+  } catch {}
+  const result = new Map();
+  for (const [sid, { prompts }] of bySession) result.set(sid, prompts);
+  return result;
+}
+
 function getArchivedSessionIds(devId) {
   const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
   const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
@@ -618,5 +647,5 @@ module.exports = {
   saveDeveloper, loadDeveloper, listDevelopers, loadAllDevelopers,
   computeTotals, computeTotalsFromDaily, computeDailyUsage, filterSessions,
   snapshotHealthHistory, loadHealthHistory, dedupArchives, recompactFromArchive,
-  getArchivedSessionIds,
+  getArchivedSessionIds, loadArchivePrompts,
 };

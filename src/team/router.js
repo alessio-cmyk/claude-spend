@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { saveDeveloper, loadDeveloper, listDevelopers, filterSessions, computeTotalsFromDaily, snapshotHealthHistory, loadHealthHistory, recompactFromArchive, getArchivedSessionIds } = require('./store');
+const { saveDeveloper, loadDeveloper, listDevelopers, filterSessions, computeTotalsFromDaily, snapshotHealthHistory, loadHealthHistory, recompactFromArchive, getArchivedSessionIds, loadArchivePrompts } = require('./store');
 const { getProductivityAnalytics, getWeekOverWeekDeltas, getInactivityStatus } = require('./analytics');
 const { uploadFile } = require('./s3');
 
@@ -206,6 +206,28 @@ function createTeamRouter() {
       res.json({ leaderboard, teamTotals });
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/team/dev/:devId/work-summary?from=&to= - AI summary of what a dev worked on (review prep)
+  router.get('/dev/:devId/work-summary', async (req, res) => {
+    const { isConfigured, getWorkSummary } = require('./ai-review');
+    if (!isConfigured()) return res.status(503).json({ error: 'AI not configured. Set GOOGLE_CREDENTIALS_BASE64 env var.' });
+    try {
+      const devId = req.params.devId;
+      const data = loadDeveloper(devId);
+      if (!data) return res.status(404).json({ error: 'Developer not found' });
+      const { from, to } = req.query;
+      const sessions = filterSessions(data.sessions || [], from, to);
+      if (sessions.length === 0) return res.status(400).json({ error: 'No sessions in selected period' });
+      const promptsBySession = loadArchivePrompts(devId);
+      const summary = await getWorkSummary(devId, sessions, promptsBySession, from, to);
+      res.json({ ok: true, devId, from: from || null, to: to || null, sessionCount: sessions.length, summary });
+    } catch (err) {
+      if (/429|RESOURCE_EXHAUSTED/i.test(err.message || '')) {
+        return res.status(429).json({ error: 'AI quota temporarily exhausted — wait a minute and try again.' });
+      }
+      res.status(500).json({ error: 'Work summary failed: ' + err.message });
     }
   });
 

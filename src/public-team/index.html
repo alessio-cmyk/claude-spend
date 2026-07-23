@@ -425,7 +425,94 @@ function applyCustom() {
   dateRange = {preset:'custom',from:f,to:t||toISO(new Date())}; loadData();
 }
 function goToDev(id) { selectedDev = id; currentTab = 'dev'; DEV_FULL_DATA = null; render(); }
-function goBack() { currentTab = 'leaderboard'; selectedDev = null; DEV_FULL_DATA = null; render(); }
+function goBack() { currentTab = 'leaderboard'; selectedDev = null; DEV_FULL_DATA = null; WORK_SUMMARY_LAST = null; render(); }
+
+/* === Work Summary (performance review prep) === */
+let WORK_SUMMARY_LAST = null; // last generated summary, for copy-as-markdown
+
+async function generateWorkSummary() {
+  const btn = document.getElementById('wsGenBtn');
+  const body = document.getElementById('workSummaryBody');
+  if (!btn || !body) return;
+  btn.disabled = true;
+  body.innerHTML = '<p style="font-size:13px;color:var(--text-tertiary)">Analyzing sessions&hellip; this can take up to a minute or two for long date ranges.</p>';
+  try {
+    const dp = getDateParams();
+    const res = await fetch('/api/team/dev/' + encodeURIComponent(selectedDev) + '/work-summary' + (dp ? '?' + dp : ''));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    WORK_SUMMARY_LAST = data;
+    renderWorkSummary(body, data);
+    const copyBtn = document.getElementById('wsCopyBtn');
+    if (copyBtn) copyBtn.style.display = '';
+  } catch (e) {
+    body.innerHTML = `<p style="font-size:13px;color:var(--rose)">${esc(e.message)}</p>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderWorkSummary(body, data) {
+  const s = data.summary || {};
+  const list = (items) => (items || []).map(b => `<li style="font-size:13px;color:var(--text-secondary);padding:3px 0;list-style:disc;margin-left:18px;line-height:1.5">${esc(b)}</li>`).join('');
+  const section = (title, inner) => inner ? `<div style="margin-top:16px"><h4 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);margin-bottom:8px">${title}</h4>${inner}</div>` : '';
+
+  const wsCard = (w, style) => `
+    <div style="padding:12px 14px;border-radius:10px;margin-bottom:10px;${style}">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+        <span style="font-size:13px;font-weight:700">${esc(w.name || '')}</span>
+        <span style="font-size:11px;color:var(--text-tertiary);font-family:var(--mono)">${esc(w.project || '')}${w.period ? ' &middot; ' + esc(w.period) : ''}${w.sessions ? ' &middot; ' + w.sessions + ' sessions' : ''}</span>
+      </div>
+      <ul>${list(w.bullets)}</ul>
+    </div>`;
+  const workstreams = (s.workstreams || []).map(w => wsCard(w, 'border:1px solid var(--border);background:var(--white)')).join('');
+  const sideProjects = (s.side_projects || []).map(w => wsCard(w, 'border:1px solid rgba(245,158,11,0.35);background:rgba(245,158,11,0.06)')).join('');
+
+  body.innerHTML = `
+    <p style="font-size:14px;line-height:1.6;color:var(--text)">${esc(s.period_summary || '')}</p>
+    ${section('Highlights', (s.highlights || []).length ? `<ul>${list(s.highlights)}</ul>` : '')}
+    ${section('Workstreams', workstreams)}
+    ${section('Paste-ready review bullets', (s.review_bullets || []).length ? `<ul>${list(s.review_bullets)}</ul>` : '')}
+    ${sideProjects ? section('&#9888; Side projects &mdash; not company work, excluded from review bullets', sideProjects) : ''}
+    ${section('Fill in from memory (logs were vague here)', (s.gaps || []).length ? `<ul>${list(s.gaps)}</ul>` : '')}
+    <p style="font-size:11px;color:var(--text-tertiary);margin-top:14px">Generated from ${data.sessionCount} sessions${data.from ? ' between ' + esc(data.from) + ' and ' + esc(data.to || 'now') : ''}. Based on prompts to Claude Code &mdash; verify against what actually shipped before submitting.</p>
+  `;
+}
+
+function workSummaryMarkdown(data) {
+  const s = data.summary || {};
+  const lines = [`# Work Summary — ${data.devId}${data.from ? ` (${data.from} → ${data.to || 'now'})` : ''}`, ''];
+  if (s.period_summary) lines.push(s.period_summary, '');
+  if ((s.highlights || []).length) lines.push('## Highlights', ...s.highlights.map(b => `- ${b}`), '');
+  if ((s.workstreams || []).length) {
+    lines.push('## Workstreams');
+    for (const w of s.workstreams) {
+      lines.push(`### ${w.name}${w.project ? ` — ${w.project}` : ''}${w.period ? ` (${w.period})` : ''}`);
+      lines.push(...(w.bullets || []).map(b => `- ${b}`), '');
+    }
+  }
+  if ((s.review_bullets || []).length) lines.push('## Review Bullets', ...s.review_bullets.map(b => `- ${b}`), '');
+  if ((s.side_projects || []).length) {
+    lines.push('## Side Projects (not company work)');
+    for (const w of s.side_projects) {
+      lines.push(`### ${w.name}${w.project ? ` — ${w.project}` : ''}${w.period ? ` (${w.period})` : ''}`);
+      lines.push(...(w.bullets || []).map(b => `- ${b}`), '');
+    }
+  }
+  if ((s.gaps || []).length) lines.push('## Fill in from memory', ...s.gaps.map(b => `- ${b}`), '');
+  return lines.join('\n');
+}
+
+async function copyWorkSummary() {
+  if (!WORK_SUMMARY_LAST) return;
+  const btn = document.getElementById('wsCopyBtn');
+  try {
+    await navigator.clipboard.writeText(workSummaryMarkdown(WORK_SUMMARY_LAST));
+    if (btn) { const orig = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = orig; }, 1500); }
+  } catch {
+    if (btn) btn.textContent = 'Copy failed';
+  }
+}
 function sortLB(key) {
   if (sortState.key === key) sortState.dir = sortState.dir === 'desc' ? 'asc' : 'desc';
   else { sortState.key = key; sortState.dir = 'desc'; }
@@ -798,6 +885,7 @@ async function renderDevView(app) {
     <div id="devCharts" class="charts-grid animate delay-2"></div>
     <div id="devROI" class="grid-2 animate delay-3"></div>
     <div id="devBottom" class="grid-2 animate delay-4"></div>
+    <div id="devWorkSummary" class="animate delay-4"></div>
     <div id="devHistogram" class="animate delay-4"></div>
     <div id="devStreakCal" class="animate delay-4"></div>
     <div id="devHeatmap" class="animate delay-4"></div>
@@ -890,6 +978,25 @@ async function renderDevView(app) {
     </div>`;
   }
   document.getElementById('devBottom').innerHTML = bottomHtml;
+
+  /* === Work Summary (performance review prep) === */
+  document.getElementById('devWorkSummary').innerHTML = `
+    <div class="chart-card" style="margin-bottom:28px">
+      <h3>Work Summary &mdash; performance review prep</h3>
+      <p style="font-size:12px;color:var(--text-tertiary);margin:6px 0 14px;line-height:1.5">
+        Reconstructs what ${esc(selectedDev)} worked on in the selected date range from their session prompts,
+        grouped into workstreams with paste-ready review bullets. Pick your quarter in the date bar above, then generate.
+      </p>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button class="btn" id="wsGenBtn" onclick="generateWorkSummary()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>
+          Generate Summary
+        </button>
+        <button class="btn" id="wsCopyBtn" onclick="copyWorkSummary()" style="display:none">Copy as Markdown</button>
+      </div>
+      <div id="workSummaryBody" style="margin-top:16px"></div>
+    </div>
+  `;
 
   // Load full dev data for session-level features
   try {

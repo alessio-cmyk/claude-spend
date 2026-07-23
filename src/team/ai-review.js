@@ -343,8 +343,191 @@ async function getPromptQuality(devId, sessions) {
   return data;
 }
 
+/**
+ * Generate a "what I worked on" summary for performance review prep.
+ * Input is compact session metadata plus per-session user prompts from the archive.
+ */
+// Vertex 429s (per-minute token quota) are transient — retry with backoff before failing
+async function generateWithRetry(model, prompt, tries = 3) {
+  let delay = 12000;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await model.generateContent(prompt);
+    } catch (e) {
+      const is429 = /429|RESOURCE_EXHAUSTED/i.test(e.message || '');
+      if (!is429 || i === tries - 1) throw e;
+      console.log(`[work-summary] Vertex 429, retrying in ${delay / 1000}s (attempt ${i + 2}/${tries})`);
+      await new Promise(r => setTimeout(r, delay));
+      delay *= 2;
+    }
+  }
+}
+
+const WORK_SUMMARY_SCHEMA = {
+  type: 'object',
+  properties: {
+    period_summary: { type: 'string' },
+    workstreams: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          project: { type: 'string' },
+          period: { type: 'string' },
+          sessions: { type: 'integer' },
+          bullets: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['name', 'bullets'],
+      },
+    },
+    side_projects: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          project: { type: 'string' },
+          period: { type: 'string' },
+          sessions: { type: 'integer' },
+          bullets: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['name', 'bullets'],
+      },
+    },
+    highlights: { type: 'array', items: { type: 'string' } },
+    review_bullets: { type: 'array', items: { type: 'string' } },
+    gaps: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['period_summary', 'workstreams', 'side_projects', 'highlights', 'review_bullets', 'gaps'],
+};
+
+async function generateWorkSummary(devId, sessions, promptsBySession, from, to) {
+  const client = getClient();
+  const model = client.getGenerativeModel({
+    model: process.env.VERTEX_MODEL || 'gemini-2.5-flash',
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 32768,
+      responseMimeType: 'application/json',
+      // Constrained decoding — guarantees syntactically valid JSON matching the shape
+      responseSchema: WORK_SUMMARY_SCHEMA,
+      // Gemini 2.5 thinking tokens count against maxOutputTokens — cap them so big
+      // session logs can't starve the actual JSON output
+      thinkingConfig: { thinkingBudget: 2048 },
+    },
+  });
+
+  const sorted = [...sessions].sort((a, b) =>
+    (a.timestamp || a.date || '').localeCompare(b.timestamp || b.date || ''));
+
+  // Budget prompt detail by session count so a full quarter stays well under model limits
+  const promptsPerSession = sorted.length > 300 ? 3 : sorted.length > 120 ? 5 : 8;
+  const MAX_CHARS = 180000;
+
+  const clean = (s) => s.substring(0, 150).replace(/[\x00-\x1f]/g, ' ');
+  let totalChars = 0, dropped = 0;
+  const lines = [];
+  for (const s of sorted) {
+    const proj = s.project ? s.project.split(/[-/]/).slice(-2).join('/') : 'unknown';
+    let prompts = promptsBySession.get(s.sessionId) || [];
+    if (prompts.length === 0 && s.firstPrompt) prompts = [s.firstPrompt];
+    const promptStr = prompts.slice(0, promptsPerSession).map(clean).join(' ⏵ ') || '(no prompt)';
+    const line = `${s.date || 'unknown'} | ${proj} | ${s.queryCount || 0}q | $${(s.cost || 0).toFixed(2)} | ${promptStr}`;
+    if (totalChars + line.length > MAX_CHARS) { dropped++; continue; }
+    totalChars += line.length;
+    lines.push(line);
+  }
+
+  const company = process.env.COMPANY_CONTEXT || 'the company';
+  const prompt = `You are helping a software developer prepare the self-assessment for their quarterly performance review at ${company}.
+Below is a chronological log of their AI coding assistant sessions from ${from || 'the beginning'} to ${to || 'now'}: date, project, query count, cost, and the actual prompts they gave the assistant (separated by ⏵).
+
+Reconstruct WHAT they worked on. Group related sessions into workstreams (a feature, a migration, a bug-fixing effort, a refactor). Write accomplishment-style bullets using strong verbs (Built, Fixed, Migrated, Designed, Debugged, Shipped).
+
+RULES:
+- Base everything ONLY on evidence in the prompts. Never invent features, metrics, or outcomes that aren't implied by the log.
+- These are requests to an AI assistant, not proof of shipped work — phrase bullets as work done ("Built X", "Investigated Y"), but do not claim business impact or launch status unless the prompts state it.
+- Ignore noise: slash commands (/model, /clear), greetings, one-word prompts like "continue" or "yes".
+- Merge repeated sessions on the same topic into one workstream with a date range.
+- If many sessions have vague prompts, list those projects under "gaps" so the developer knows to fill them in from memory.
+- SEPARATE company work from personal side projects. Work related to ${company}'s product, codebase, infrastructure, or business goes in "workstreams". Clearly personal work — games, hobby tools, experiments, anything unrelated to the company's product (e.g. game engines, Discord bots, recipe apps) — goes in "side_projects" with the same structure. When genuinely unsure, default to "workstreams".
+- "highlights" and "review_bullets" must ONLY cover company work — never include side projects there.
+
+SESSIONS (${lines.length} of ${sorted.length}${dropped ? `, ${dropped} omitted for length` : ''}):
+${lines.join('\n')}
+
+Return ONLY a JSON object with this exact structure:
+{
+  "period_summary": "3-4 sentence overview of what this developer focused on during the period",
+  "workstreams": [
+    { "name": "short human-readable workstream name", "project": "project name", "period": "e.g. Apr 2 – May 10", "sessions": <number>, "bullets": ["accomplishment bullet", ...] }
+  ],
+  "side_projects": [
+    { "name": "short name", "project": "project name", "period": "date range", "sessions": <number>, "bullets": ["what it is / what was done"] }
+  ],
+  "highlights": ["the 3-5 most significant COMPANY accomplishments"],
+  "review_bullets": ["8-12 polished, paste-ready bullets for a performance review self-assessment — company work only"],
+  "gaps": ["projects or periods the log can't explain well (vague prompts), which the developer should describe from memory"]
+}`;
+
+  const result = await generateWithRetry(model, prompt);
+  const candidate = result.response.candidates[0];
+  // Long responses can be split across multiple parts — join them all
+  const text = candidate.content.parts.map(p => p.text || '').join('').trim();
+  const finishReason = candidate.finishReason || 'UNKNOWN';
+
+  let cleanText = text;
+  if (cleanText.startsWith('```')) {
+    cleanText = cleanText.split('```')[1];
+    if (cleanText.startsWith('json')) cleanText = cleanText.slice(4);
+    cleanText = cleanText.trim();
+  }
+  let parseError = null;
+  try {
+    return JSON.parse(cleanText);
+  } catch (e) {
+    parseError = e.message;
+    // Invalid escape sequences (e.g. a literal \d from a regex in a prompt) are the
+    // most common breakage — escape any backslash not starting a valid JSON escape
+    try { return JSON.parse(cleanText.replace(/\\(?!["\\/bfnrtu])/g, '\\\\')); } catch {}
+    const braceMatch = cleanText.match(/\{[\s\S]*\}/);
+    if (braceMatch) {
+      try { return JSON.parse(braceMatch[0]); } catch {}
+    }
+    let fixed = cleanText;
+    const openQuotes = (fixed.match(/"/g) || []).length;
+    if (openQuotes % 2 !== 0) fixed += '"';
+    const opens = (fixed.match(/\[/g) || []).length - (fixed.match(/\]/g) || []).length;
+    const braces = (fixed.match(/\{/g) || []).length - (fixed.match(/\}/g) || []).length;
+    for (let i = 0; i < opens; i++) fixed += ']';
+    for (let i = 0; i < braces; i++) fixed += '}';
+    try { return JSON.parse(fixed); } catch {}
+    console.error(`[work-summary] parse failed for ${devId}: finishReason=${finishReason} textLen=${text.length} error=${JSON.stringify(parseError)} tail=${JSON.stringify(text.slice(-120))}`);
+    return {
+      _parseFailed: true,
+      period_summary: `Work summary could not be parsed (${finishReason === 'MAX_TOKENS' ? 'response was cut off — try a shorter date range' : 'malformed response — try again'}).`,
+      workstreams: [], side_projects: [], highlights: [], review_bullets: [], gaps: [],
+    };
+  }
+}
+
+// In-memory cache for work summaries (keyed by devId + range + session count)
+const _workSummaryCache = new Map();
+const WORK_SUMMARY_TTL = 60 * 60 * 1000; // 1 hour
+
+async function getWorkSummary(devId, sessions, promptsBySession, from, to) {
+  const cacheKey = `${devId}:${from || ''}:${to || ''}:${sessions.length}`;
+  const cached = _workSummaryCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < WORK_SUMMARY_TTL) return cached.data;
+  const data = await generateWorkSummary(devId, sessions, promptsBySession, from, to);
+  // Never cache a failed parse — the next attempt should retry for real
+  if (!data._parseFailed) _workSummaryCache.set(cacheKey, { data, ts: Date.now() });
+  return data;
+}
+
 function isConfigured() {
   return !!process.env.GOOGLE_CREDENTIALS_BASE64;
 }
 
-module.exports = { generateDevReview, scorePromptQuality, getPromptQuality, isConfigured };
+module.exports = { generateDevReview, scorePromptQuality, getPromptQuality, getWorkSummary, isConfigured };
