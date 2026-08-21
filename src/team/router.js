@@ -106,7 +106,7 @@ function createTeamRouter() {
   });
 
   // POST /api/team/sync - Developer pushes their data
-  router.post('/sync', express.json({ limit: '50mb' }), async (req, res) => {
+  router.post('/sync', express.json({ limit: '100mb' }), async (req, res) => {
     let { devId, data, key, timezone } = req.body;
     if (!data) {
       return res.status(400).json({ error: 'Missing data' });

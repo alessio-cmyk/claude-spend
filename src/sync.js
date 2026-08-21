@@ -1,5 +1,6 @@
 const http = require('http');
 const https = require('https');
+const zlib = require('zlib');
 
 function httpRequest(url, options, payload) {
   const transport = url.protocol === 'https:' ? https : http;
@@ -13,11 +14,16 @@ function httpRequest(url, options, payload) {
       res.on('end', () => {
         try {
           const json = JSON.parse(body);
-          if (res.statusCode >= 400) reject(new Error(json.error || 'Server error ' + res.statusCode));
-          else resolve(json);
+          if (res.statusCode >= 400) {
+            const err = new Error(json.error || 'Server error ' + res.statusCode);
+            err.statusCode = res.statusCode;
+            reject(err);
+          } else resolve(json);
         } catch {
           const preview = (body || '').substring(0, 200);
-          reject(new Error(`Invalid response from server (HTTP ${res.statusCode}, ${body.length} bytes): ${preview}`));
+          const err = new Error(`Invalid response from server (HTTP ${res.statusCode}, ${body.length} bytes): ${preview}`);
+          err.statusCode = res.statusCode;
+          reject(err);
         }
       });
     });
@@ -48,6 +54,21 @@ async function fetchServerSessions(serverUrl, devId) {
   }
 }
 
+// Cap per-query text length; null caps of 0 drop the field entirely.
+function slimSession(session, promptCap, responseCap) {
+  const queries = session.queries.map(q => {
+    const slim = { ...q };
+    if (typeof slim.userPrompt === 'string' && slim.userPrompt.length > promptCap) {
+      slim.userPrompt = slim.userPrompt.substring(0, promptCap);
+    }
+    if (typeof slim.assistantResponse === 'string') {
+      slim.assistantResponse = responseCap > 0 ? slim.assistantResponse.substring(0, responseCap) : null;
+    }
+    return slim;
+  });
+  return { ...session, queries };
+}
+
 async function syncToTeam(serverUrl, devId, parsedData, apiKey) {
   // Incremental sync: only send new sessions or those needing recompact
   const serverMap = await fetchServerSessions(serverUrl, devId);
@@ -75,6 +96,21 @@ async function syncToTeam(serverUrl, devId, parsedData, apiKey) {
   // Batch uploads: cap both size and session count to avoid gateway timeouts
   const MAX_BATCH_BYTES = 10 * 1024 * 1024; // 10MB per batch (safe for proxy timeouts)
   const MAX_BATCH_SESSIONS = 50;
+
+  // Sessions are the atomic sync unit, so a single session must fit in a batch.
+  // Query text is only used for short previews and prompt grouping server-side;
+  // token/cost/tool usage is never touched by the caps.
+  const TEXT_CAPS = [[4000, 4000], [1000, 500], [300, 0], [100, 0]];
+  const fitSession = (s) => {
+    if (!Array.isArray(s.queries) || JSON.stringify(s).length <= MAX_BATCH_BYTES) return s;
+    for (const [promptCap, responseCap] of TEXT_CAPS) {
+      const slim = slimSession(s, promptCap, responseCap);
+      if (JSON.stringify(slim).length <= MAX_BATCH_BYTES) return slim;
+    }
+    return slimSession(s, TEXT_CAPS[TEXT_CAPS.length - 1][0], 0);
+  };
+  sessions = sessions.map(fitSession);
+
   const batches = [[]];
   let batchSize = 0;
   for (const s of sessions) {
@@ -88,28 +124,44 @@ async function syncToTeam(serverUrl, devId, parsedData, apiKey) {
     batchSize += sSize;
   }
 
-  let lastResult;
-  for (let i = 0; i < batches.length; i++) {
-    const batch = batches[i];
+  const url = new URL('/api/team/sync', serverUrl);
+  const sendBatch = (batch) => {
     const body = { devId, data: { ...parsedData, sessions: batch } };
     if (apiKey) body.key = apiKey;
     try { body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch {}
-    const payload = JSON.stringify(body);
-    const sizeMB = (Buffer.byteLength(payload) / 1024 / 1024).toFixed(1);
+    const raw = JSON.stringify(body);
+    const payload = zlib.gzipSync(Buffer.from(raw));
+    return {
+      sizeMB: (Buffer.byteLength(raw) / 1024 / 1024).toFixed(1),
+      result: httpRequest(url, {
+        method: 'POST',
+        timeout: 120000,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Encoding': 'gzip',
+          'Content-Length': payload.length,
+        },
+      }, payload),
+    };
+  };
+
+  let lastResult;
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i];
+    const { sizeMB, result } = sendBatch(batch);
 
     if (batches.length > 1) {
       process.stdout.write(`  Batch ${i + 1}/${batches.length}: ${batch.length} sessions (${sizeMB}MB)\n`);
     }
 
-    const url = new URL('/api/team/sync', serverUrl);
-    lastResult = await httpRequest(url, {
-      method: 'POST',
-      timeout: 120000,
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload),
-      },
-    }, payload);
+    try {
+      lastResult = await result;
+    } catch (err) {
+      if (err.statusCode !== 413) throw err;
+      // Server still rejected the size: strip all text and retry so usage data lands
+      process.stdout.write(`  Batch ${i + 1} too large for server, retrying without message text...\n`);
+      lastResult = await sendBatch(batch.map(s => Array.isArray(s.queries) ? slimSession(s, 100, 0) : s)).result;
+    }
   }
 
   return lastResult || { ok: true, devId, sessionCount: serverMap.size };
