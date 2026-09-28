@@ -5,40 +5,7 @@ const readline = require('readline');
 
 // Anthropic API pricing per token (from platform.claude.com/docs/en/about-claude/pricing)
 // Note: These are API-equivalent estimates. Claude Code subscription pricing differs.
-// Cache write = 1.25x base input (5-min TTL). Cache read = 0.1x base input.
-const MODEL_PRICING = {
-  // Opus 4.5, 4.6: $5/MTok in, $25/MTok out
-  'opus-4.5': { input: 5 / 1e6, output: 25 / 1e6, cacheWrite: 6.25 / 1e6, cacheRead: 0.50 / 1e6 },
-  'opus-4.6': { input: 5 / 1e6, output: 25 / 1e6, cacheWrite: 6.25 / 1e6, cacheRead: 0.50 / 1e6 },
-  // Opus 4.0, 4.1: $15/MTok in, $75/MTok out
-  'opus-4.0': { input: 15 / 1e6, output: 75 / 1e6, cacheWrite: 18.75 / 1e6, cacheRead: 1.50 / 1e6 },
-  'opus-4.1': { input: 15 / 1e6, output: 75 / 1e6, cacheWrite: 18.75 / 1e6, cacheRead: 1.50 / 1e6 },
-  // Sonnet 3.7, 4, 4.5, 4.6: $3/MTok in, $15/MTok out
-  sonnet: { input: 3 / 1e6, output: 15 / 1e6, cacheWrite: 3.75 / 1e6, cacheRead: 0.30 / 1e6 },
-  // Haiku 4.5: $1/MTok in, $5/MTok out
-  'haiku-4.5': { input: 1 / 1e6, output: 5 / 1e6, cacheWrite: 1.25 / 1e6, cacheRead: 0.10 / 1e6 },
-  // Haiku 3.5: $0.80/MTok in, $4/MTok out
-  'haiku-3.5': { input: 0.80 / 1e6, output: 4 / 1e6, cacheWrite: 1.00 / 1e6, cacheRead: 0.08 / 1e6 },
-};
-const DEFAULT_PRICING = MODEL_PRICING.sonnet;
-
-function getPricing(model) {
-  if (!model) return DEFAULT_PRICING;
-  const m = model.toLowerCase();
-  if (m.includes('opus')) {
-    // Opus 4.5/4.6 are cheaper than Opus 4.0/4.1
-    if (m.includes('4-6') || m.includes('4.6')) return MODEL_PRICING['opus-4.6'];
-    if (m.includes('4-5') || m.includes('4.5')) return MODEL_PRICING['opus-4.5'];
-    if (m.includes('4-1') || m.includes('4.1')) return MODEL_PRICING['opus-4.1'];
-    return MODEL_PRICING['opus-4.0']; // Opus 4.0 and Opus 3
-  }
-  if (m.includes('sonnet')) return MODEL_PRICING.sonnet;
-  if (m.includes('haiku')) {
-    if (m.includes('4-5') || m.includes('4.5')) return MODEL_PRICING['haiku-4.5'];
-    return MODEL_PRICING['haiku-3.5'];
-  }
-  return DEFAULT_PRICING;
-}
+const { getPricing, queryCost } = require('./pricing');
 
 function getClaudeDir() {
   return path.join(os.homedir(), '.claude');
@@ -101,16 +68,20 @@ function extractSessionData(entries) {
       const model = entry.message.model || 'unknown';
       if (model === '<synthetic>') continue;
 
-      const pricing = getPricing(model);
       const inputTokens = usage.input_tokens || 0;
       const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
       const cacheReadTokens = usage.cache_read_input_tokens || 0;
       const outputTokens = usage.output_tokens || 0;
       const totalTokens = inputTokens + cacheCreationTokens + cacheReadTokens + outputTokens;
-      const cost = (inputTokens * pricing.input)
-        + (cacheCreationTokens * pricing.cacheWrite)
-        + (cacheReadTokens * pricing.cacheRead)
-        + (outputTokens * pricing.output);
+      // 5-minute vs 1-hour cache writes are priced differently
+      const cacheSplit = usage.cache_creation || null;
+      const cacheCreation5mTokens = cacheSplit ? (cacheSplit.ephemeral_5m_input_tokens || 0) : undefined;
+      const cacheCreation1hTokens = cacheSplit ? (cacheSplit.ephemeral_1h_input_tokens || 0) : undefined;
+      const speed = usage.speed === 'fast' ? 'fast' : undefined;
+      const cost = queryCost({
+        model, inputTokens, cacheCreationTokens, cacheCreation5mTokens, cacheCreation1hTokens,
+        cacheReadTokens, outputTokens, speed,
+      });
 
       const tools = [];
       let assistantResponse = null;
@@ -137,9 +108,12 @@ function extractSessionData(entries) {
         model,
         inputTokens,
         cacheCreationTokens,
+        cacheCreation5mTokens,
+        cacheCreation1hTokens,
         cacheReadTokens,
         outputTokens,
         totalTokens,
+        speed,
         cost,
         tools,
       });
@@ -425,9 +399,13 @@ async function parseAllSessions() {
   const totalAllInput = sessions.reduce((sum, s) => sum + s.inputTokens + s.cacheCreationTokens + s.cacheReadTokens, 0);
 
   // What caching saved: cache reads at full input price minus what they actually cost
-  const avgInputPrice = DEFAULT_PRICING.input;
-  const avgCacheReadPrice = DEFAULT_PRICING.cacheRead;
-  const totalSaved = totalCacheReadTokens * (avgInputPrice - avgCacheReadPrice);
+  let totalSaved = 0;
+  for (const s of sessions) {
+    for (const q of s.queries) {
+      const p = getPricing(q.model);
+      totalSaved += q.cacheReadTokens * (p.input - p.cacheRead);
+    }
+  }
   const cacheHitRate = totalAllInput > 0 ? totalCacheReadTokens / totalAllInput : 0;
 
   const grandTotals = {
