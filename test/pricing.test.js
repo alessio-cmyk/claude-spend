@@ -177,3 +177,37 @@ test('repriceDeveloper spreads cost over days by tokens when the old cost was ze
   assert.equal(r._dailyBreakdown['2026-09-01'].cost, 0.75);
   assert.equal(r._dailyBreakdown['2026-09-02'].cost, 0.25);
 });
+
+test('parseAllSessions counts fast-mode rates in cache savings', async (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-spend-home-'));
+  const prevHome = process.env.HOME;
+  process.env.HOME = home;
+  t.after(() => {
+    process.env.HOME = prevHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  const projectDir = path.join(home, '.claude', 'projects', 'demo');
+  fs.mkdirSync(projectDir, { recursive: true });
+  const lines = [
+    { type: 'user', timestamp: '2026-09-01T00:00:00.000Z', message: { role: 'user', content: 'hi' } },
+    {
+      type: 'assistant',
+      timestamp: '2026-09-01T00:00:01.000Z',
+      message: {
+        model: 'claude-opus-5',
+        usage: { input_tokens: 0, cache_read_input_tokens: 1e6, output_tokens: 0, speed: 'fast' },
+        content: [],
+      },
+    },
+  ];
+  fs.writeFileSync(path.join(projectDir, 'fast-session.jsonl'), lines.map(l => JSON.stringify(l)).join('\n') + '\n');
+
+  const { parseAllSessions } = require('../src/parser');
+  const data = await parseAllSessions();
+  // 1M cache reads at fast Opus 5 rates: $1 paid vs $10 at full input price
+  assert.ok(Math.abs(data.totals.totalCost - 1) < 1e-9);
+  assert.ok(Math.abs(data.totals.totalSaved - 9) < 1e-9);
+  const insight = data.insights.find(i => i.id === 'cache-savings');
+  assert.match(insight.description, /\$10\.00 instead of \$1\.00/);
+});
