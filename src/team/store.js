@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { uploadFile } = require('./s3');
+const { queryCost } = require('../pricing');
 
 const DATA_DIR = process.env.CLAUDE_SPEND_DATA || path.join(process.cwd(), 'data', 'team');
 const ARCHIVE_DIR = path.join(DATA_DIR, 'archive');
@@ -37,6 +38,9 @@ async function saveDeveloper(devId, data, timezone) {
     if (fs.existsSync(fp)) {
       try { existing = JSON.parse(fs.readFileSync(fp, 'utf-8')); } catch {}
     }
+
+    // Price on the server so costs don't depend on which client version synced
+    data = { ...data, sessions: (data.sessions || []).map(repriceSession) };
 
     // Merge sessions by sessionId — update existing if incoming has more queries
     const existingMap = new Map((existing.sessions || []).map(s => [s.sessionId, s]));
@@ -518,6 +522,147 @@ function computeTotalsFromDaily(dailyUsage, sessions) {
   };
 }
 
+// Parse a dev archive: group all queries by sessionId -> { meta, queries[] }
+function readArchiveSessions(archivePath) {
+  const lines = fs.readFileSync(archivePath, 'utf-8').trim().split('\n').filter(Boolean);
+  const archiveSessions = new Map();
+  for (const line of lines) {
+    try {
+      const s = JSON.parse(line);
+      const sid = s.sessionId;
+      if (!archiveSessions.has(sid)) {
+        const { queries, ...meta } = s;
+        archiveSessions.set(sid, { meta, queries: [] });
+      }
+      const entry = archiveSessions.get(sid);
+      // Keep most complete metadata
+      if ((s.queryCount || 0) > (entry.meta.queryCount || 0)) {
+        const { queries, ...meta } = s;
+        entry.meta = meta;
+      }
+      // Collect all queries (dedup by timestamp)
+      const seen = new Set(entry.queries.map(q => (q.userTimestamp || '') + '|' + (q.assistantTimestamp || '')));
+      for (const q of (s.queries || [])) {
+        const key = (q.userTimestamp || '') + '|' + (q.assistantTimestamp || '');
+        if (key !== '|' && seen.has(key)) continue;
+        seen.add(key);
+        entry.queries.push(q);
+      }
+    } catch {}
+  }
+  return archiveSessions;
+}
+
+// Recompute per-query and session cost from token counts with current pricing
+function repriceSession(s) {
+  if (!Array.isArray(s.queries) || s.queries.length === 0) return s;
+  let cost = 0;
+  const queries = s.queries.map(q => {
+    const c = queryCost(q);
+    cost += c;
+    return { ...q, cost: c };
+  });
+  return { ...s, queries, cost };
+}
+
+// Rewrite the cost fields of a compacted session from its full query list
+function applyQueryCosts(session, queries) {
+  const models = {};
+  for (const [m, v] of Object.entries(session._models || {})) models[m] = { ...v, cost: 0 };
+  const daily = {};
+  for (const [d, v] of Object.entries(session._dailyBreakdown || {})) daily[d] = { ...v, cost: 0 };
+  let cost = 0;
+  for (const q of queries) {
+    const c = queryCost(q);
+    cost += c;
+    if (models[q.model]) models[q.model].cost += c;
+    const qDate = (q.assistantTimestamp || q.userTimestamp || '').split('T')[0] || session.date;
+    if (daily[qDate]) daily[qDate].cost += c;
+  }
+  const out = { ...session, cost };
+  if (session._models) out._models = models;
+  if (session._dailyBreakdown) out._dailyBreakdown = daily;
+  return out;
+}
+
+// Estimate a new cost for a compacted session with no archived queries: split the
+// session's token counts across its models by token share, then scale daily costs.
+function repriceFromTotals(session) {
+  const models = session._models && Object.keys(session._models).length > 0
+    ? session._models
+    : { [session.model || 'unknown']: { tokens: session.totalTokens || 0, cost: session.cost || 0 } };
+  const totalModelTokens = Object.values(models).reduce((sum, v) => sum + (v.tokens || 0), 0);
+  const newModels = {};
+  let cost = 0;
+  for (const [m, v] of Object.entries(models)) {
+    const share = totalModelTokens > 0 ? (v.tokens || 0) / totalModelTokens : 1 / Object.keys(models).length;
+    const c = queryCost({
+      model: m,
+      inputTokens: (session.inputTokens || 0) * share,
+      cacheCreationTokens: (session.cacheCreationTokens || 0) * share,
+      cacheReadTokens: (session.cacheReadTokens || 0) * share,
+      outputTokens: (session.outputTokens || 0) * share,
+    });
+    newModels[m] = { ...v, cost: c };
+    cost += c;
+  }
+  const ratio = session.cost > 0 ? cost / session.cost : 0;
+  const out = { ...session, cost };
+  if (session._models) out._models = newModels;
+  if (session._dailyBreakdown) {
+    out._dailyBreakdown = {};
+    for (const [d, v] of Object.entries(session._dailyBreakdown)) {
+      out._dailyBreakdown[d] = { ...v, cost: (v.cost || 0) * ratio };
+    }
+  }
+  return out;
+}
+
+// Recompute every stored session's cost with current pricing. Uses archived queries
+// when the archive holds the whole session, otherwise estimates from session totals.
+async function repriceDeveloper(devId) {
+  const release = await acquireLock('dev:' + devId);
+  try {
+    ensureDir();
+    const fp = devPath(devId);
+    if (!fs.existsSync(fp)) return { error: 'Developer not found' };
+
+    const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
+    const archiveSessions = fs.existsSync(archivePath) ? readArchiveSessions(archivePath) : new Map();
+
+    const existing = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+    const oldCost = (existing.sessions || []).reduce((sum, s) => sum + (s.cost || 0), 0);
+    let fromQueries = 0, estimated = 0;
+    const sessions = (existing.sessions || []).map(s => {
+      const archived = archiveSessions.get(s.sessionId);
+      if (archived && archived.queries.length >= (s.queryCount || 0) && archived.queries.length > 0) {
+        fromQueries++;
+        return applyQueryCosts(s, archived.queries);
+      }
+      estimated++;
+      return repriceFromTotals(s);
+    });
+
+    const result = {
+      ...existing,
+      sessions,
+      totals: computeTotals(sessions),
+      dailyUsage: computeDailyUsage(sessions),
+    };
+
+    const tmpPath = fp + '.tmp.' + process.pid;
+    fs.writeFileSync(tmpPath, JSON.stringify(result));
+    fs.renameSync(tmpPath, fp);
+    uploadFile(fp);
+    invalidateDevCache();
+
+    return { ok: true, sessions: sessions.length, fromQueries, estimated, oldCost, newCost: result.totals.totalCost };
+  } finally {
+    release();
+  }
+}
+
 async function recompactFromArchive(devId) {
   const release = await acquireLock('dev:' + devId);
   try {
@@ -529,33 +674,7 @@ async function recompactFromArchive(devId) {
     const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
     if (!fs.existsSync(archivePath)) return { error: 'No archive found for ' + devId };
 
-    // Parse archive: group all queries by sessionId
-    const lines = fs.readFileSync(archivePath, 'utf-8').trim().split('\n').filter(Boolean);
-    const archiveSessions = new Map(); // sessionId -> { meta, queries[] }
-    for (const line of lines) {
-      try {
-        const s = JSON.parse(line);
-        const sid = s.sessionId;
-        if (!archiveSessions.has(sid)) {
-          const { queries, ...meta } = s;
-          archiveSessions.set(sid, { meta, queries: [] });
-        }
-        const entry = archiveSessions.get(sid);
-        // Keep most complete metadata
-        if ((s.queryCount || 0) > (entry.meta.queryCount || 0)) {
-          const { queries, ...meta } = s;
-          entry.meta = meta;
-        }
-        // Collect all queries (dedup by timestamp)
-        const seen = new Set(entry.queries.map(q => (q.userTimestamp || '') + '|' + (q.assistantTimestamp || '')));
-        for (const q of (s.queries || [])) {
-          const key = (q.userTimestamp || '') + '|' + (q.assistantTimestamp || '');
-          if (key !== '|' && seen.has(key)) continue;
-          seen.add(key);
-          entry.queries.push(q);
-        }
-      } catch {}
-    }
+    const archiveSessions = readArchiveSessions(archivePath);
 
     // Load existing dev data
     const existing = JSON.parse(fs.readFileSync(fp, 'utf-8'));
@@ -646,6 +765,6 @@ function getArchivedSessionIds(devId) {
 module.exports = {
   saveDeveloper, loadDeveloper, listDevelopers, loadAllDevelopers,
   computeTotals, computeTotalsFromDaily, computeDailyUsage, filterSessions,
-  snapshotHealthHistory, loadHealthHistory, dedupArchives, recompactFromArchive,
+  snapshotHealthHistory, loadHealthHistory, dedupArchives, recompactFromArchive, repriceDeveloper,
   getArchivedSessionIds, loadArchivePrompts,
 };
