@@ -63,16 +63,13 @@ function getPricing(model) {
   return DEFAULT_PRICING;
 }
 
-// Cost of one query from its token fields. Queries recorded before the TTL split
-// was tracked only have cacheCreationTokens; Claude Code writes almost all of its
-// cache with the 1-hour TTL, so those are priced as 1-hour writes.
+// Cost of one query from its token fields. Cache writes not covered by the TTL
+// split (queries recorded before it was tracked, or a partial split) are priced
+// as 1-hour writes, since Claude Code writes almost all of its cache that way.
 function queryCost(q) {
   const p = getPricing(q.model);
-  const total5m = q.cacheCreation5mTokens;
-  const total1h = q.cacheCreation1hTokens;
-  const hasSplit = typeof total5m === 'number' || typeof total1h === 'number';
-  const write5m = hasSplit ? (total5m || 0) : 0;
-  const write1h = hasSplit ? (total1h || 0) : (q.cacheCreationTokens || 0);
+  const write5m = q.cacheCreation5mTokens || 0;
+  const write1h = Math.max(q.cacheCreationTokens || 0, write5m + (q.cacheCreation1hTokens || 0)) - write5m;
   const cost = (q.inputTokens || 0) * p.input
     + write5m * p.cacheWrite5m
     + write1h * p.cacheWrite1h

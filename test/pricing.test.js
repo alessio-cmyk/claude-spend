@@ -146,3 +146,34 @@ test('repriceDeveloper recomputes stored costs from the archive and from totals'
   assert.ok(Math.abs(r2._dailyBreakdown['2026-09-03'].cost - 5.5) < 1e-9);
   assert.ok(Math.abs(dev.totals.totalCost - 6.5) < 1e-9);
 });
+
+test('queryCost prices cache writes missing from a partial split as 1-hour', () => {
+  const base = { model: 'claude-opus-5', cacheCreationTokens: 1e6 };
+  // Empty cache_creation object: parser records both counters as 0
+  assert.equal(queryCost({ ...base, cacheCreation5mTokens: 0, cacheCreation1hTokens: 0 }), 10);
+  // Only the 5-minute counter present
+  assert.equal(queryCost({ ...base, cacheCreation5mTokens: 4e5 }), 0.4 * 6.25 + 0.6 * 10);
+});
+
+test('repriceDeveloper spreads cost over days by tokens when the old cost was zero', async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-spend-pricing-'));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+  const store = loadStore(tempDir);
+
+  const s = {
+    sessionId: 's1', date: '2026-09-01', queryCount: 2, promptCount: 2, cost: 0, totalTokens: 2e6,
+    inputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 2e6, outputTokens: 0,
+    _models: { 'claude-opus-5': { queries: 2, tokens: 2e6, cost: 0 } },
+    _dailyBreakdown: {
+      '2026-09-01': { tokens: 1.5e6, cost: 0, queries: 1, prompts: 1 },
+      '2026-09-02': { tokens: 0.5e6, cost: 0, queries: 1, prompts: 1 },
+    },
+  };
+  fs.writeFileSync(path.join(tempDir, 'dev1.json'), JSON.stringify({ devId: 'dev1', sessions: [s] }));
+
+  await store.repriceDeveloper('dev1');
+  const [r] = JSON.parse(fs.readFileSync(path.join(tempDir, 'dev1.json'), 'utf-8')).sessions;
+  assert.equal(r.cost, 1);
+  assert.equal(r._dailyBreakdown['2026-09-01'].cost, 0.75);
+  assert.equal(r._dailyBreakdown['2026-09-02'].cost, 0.25);
+});

@@ -403,7 +403,7 @@ async function parseAllSessions() {
   for (const s of sessions) {
     for (const q of s.queries) {
       const p = getPricing(q.model);
-      totalSaved += q.cacheReadTokens * (p.input - p.cacheRead);
+      totalSaved += q.cacheReadTokens * (p.input - p.cacheRead) * (q.speed === 'fast' ? 2 : 1);
     }
   }
   const cacheHitRate = totalAllInput > 0 ? totalCacheReadTokens / totalAllInput : 0;
