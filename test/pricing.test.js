@@ -180,10 +180,14 @@ test('repriceDeveloper spreads cost over days by tokens when the old cost was ze
 
 test('parseAllSessions counts fast-mode rates in cache savings', async (t) => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-spend-home-'));
-  const prevHome = process.env.HOME;
+  // os.homedir() reads HOME on POSIX and USERPROFILE on Windows
+  const prev = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
   process.env.HOME = home;
+  process.env.USERPROFILE = home;
   t.after(() => {
-    process.env.HOME = prevHome;
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
     fs.rmSync(home, { recursive: true, force: true });
   });
 
