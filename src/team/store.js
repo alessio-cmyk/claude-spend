@@ -606,13 +606,20 @@ function repriceFromTotals(session) {
     newModels[m] = { ...v, cost: c };
     cost += c;
   }
-  const ratio = session.cost > 0 ? cost / session.cost : 0;
   const out = { ...session, cost };
   if (session._models) out._models = newModels;
   if (session._dailyBreakdown) {
+    // Spread the new cost over days by their old cost share, or by token share
+    // when there was no old cost to go by
+    const days = Object.entries(session._dailyBreakdown);
+    const oldDailyCost = days.reduce((sum, [, v]) => sum + (v.cost || 0), 0);
+    const dailyTokens = days.reduce((sum, [, v]) => sum + (v.tokens || 0), 0);
     out._dailyBreakdown = {};
-    for (const [d, v] of Object.entries(session._dailyBreakdown)) {
-      out._dailyBreakdown[d] = { ...v, cost: (v.cost || 0) * ratio };
+    for (const [d, v] of days) {
+      const share = oldDailyCost > 0 ? (v.cost || 0) / oldDailyCost
+        : dailyTokens > 0 ? (v.tokens || 0) / dailyTokens
+        : 1 / days.length;
+      out._dailyBreakdown[d] = { ...v, cost: cost * share };
     }
   }
   return out;

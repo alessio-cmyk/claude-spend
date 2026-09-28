@@ -146,3 +146,72 @@ test('repriceDeveloper recomputes stored costs from the archive and from totals'
   assert.ok(Math.abs(r2._dailyBreakdown['2026-09-03'].cost - 5.5) < 1e-9);
   assert.ok(Math.abs(dev.totals.totalCost - 6.5) < 1e-9);
 });
+
+test('queryCost prices cache writes missing from a partial split as 1-hour', () => {
+  const base = { model: 'claude-opus-5', cacheCreationTokens: 1e6 };
+  // Empty cache_creation object: parser records both counters as 0
+  assert.equal(queryCost({ ...base, cacheCreation5mTokens: 0, cacheCreation1hTokens: 0 }), 10);
+  // Only the 5-minute counter present
+  assert.equal(queryCost({ ...base, cacheCreation5mTokens: 4e5 }), 0.4 * 6.25 + 0.6 * 10);
+});
+
+test('repriceDeveloper spreads cost over days by tokens when the old cost was zero', async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-spend-pricing-'));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+  const store = loadStore(tempDir);
+
+  const s = {
+    sessionId: 's1', date: '2026-09-01', queryCount: 2, promptCount: 2, cost: 0, totalTokens: 2e6,
+    inputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 2e6, outputTokens: 0,
+    _models: { 'claude-opus-5': { queries: 2, tokens: 2e6, cost: 0 } },
+    _dailyBreakdown: {
+      '2026-09-01': { tokens: 1.5e6, cost: 0, queries: 1, prompts: 1 },
+      '2026-09-02': { tokens: 0.5e6, cost: 0, queries: 1, prompts: 1 },
+    },
+  };
+  fs.writeFileSync(path.join(tempDir, 'dev1.json'), JSON.stringify({ devId: 'dev1', sessions: [s] }));
+
+  await store.repriceDeveloper('dev1');
+  const [r] = JSON.parse(fs.readFileSync(path.join(tempDir, 'dev1.json'), 'utf-8')).sessions;
+  assert.equal(r.cost, 1);
+  assert.equal(r._dailyBreakdown['2026-09-01'].cost, 0.75);
+  assert.equal(r._dailyBreakdown['2026-09-02'].cost, 0.25);
+});
+
+test('parseAllSessions counts fast-mode rates in cache savings', async (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-spend-home-'));
+  // os.homedir() reads HOME on POSIX and USERPROFILE on Windows
+  const prev = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+  t.after(() => {
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  const projectDir = path.join(home, '.claude', 'projects', 'demo');
+  fs.mkdirSync(projectDir, { recursive: true });
+  const lines = [
+    { type: 'user', timestamp: '2026-09-01T00:00:00.000Z', message: { role: 'user', content: 'hi' } },
+    {
+      type: 'assistant',
+      timestamp: '2026-09-01T00:00:01.000Z',
+      message: {
+        model: 'claude-opus-5',
+        usage: { input_tokens: 0, cache_read_input_tokens: 1e6, output_tokens: 0, speed: 'fast' },
+        content: [],
+      },
+    },
+  ];
+  fs.writeFileSync(path.join(projectDir, 'fast-session.jsonl'), lines.map(l => JSON.stringify(l)).join('\n') + '\n');
+
+  const { parseAllSessions } = require('../src/parser');
+  const data = await parseAllSessions();
+  // 1M cache reads at fast Opus 5 rates: $1 paid vs $10 at full input price
+  assert.ok(Math.abs(data.totals.totalCost - 1) < 1e-9);
+  assert.ok(Math.abs(data.totals.totalSaved - 9) < 1e-9);
+  const insight = data.insights.find(i => i.id === 'cache-savings');
+  assert.match(insight.description, /\$10\.00 instead of \$1\.00/);
+});
