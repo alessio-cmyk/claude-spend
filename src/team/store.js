@@ -58,10 +58,11 @@ async function saveDeveloper(devId, data, timezone) {
 
     // Archive queries before compacting. Uses the small session-ID index instead of
     // reading the (potentially huge) archive. null = archives not hydrated yet and no
-    // index on disk: then archive only what's clearly new and skip gap backfill, which
-    // would otherwise re-archive every incoming session.
+    // index on disk: we can't tell what's archived, so archive every incoming session in
+    // full. Readers dedupe repeated queries, whereas archiving only a tail would get the
+    // session into the index and hide the missing head from backfill forever.
     const archiveIndex = loadArchiveIndex(devId);
-    const isArchived = sid => (archiveIndex ? archiveIndex.has(sid) : true);
+    const isArchived = sid => (archiveIndex ? archiveIndex.has(sid) : false);
     const prevById = new Map((existing.sessions || []).map(p => [p.sessionId, p]));
 
     const toArchive = [];
@@ -91,7 +92,7 @@ async function saveDeveloper(devId, data, timezone) {
         queued.add(s.sessionId);
       }
     }
-    appendToArchive(devId, toArchive);
+    await appendToArchive(devId, toArchive);
 
     const newSessions = rawNewSessions.map(compactSession);
     const merged = [...existingMap.values(), ...newSessions];

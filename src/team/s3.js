@@ -28,18 +28,25 @@ function toKey(filePath) {
   return getPrefix() + rel.replace(/\\/g, '/');
 }
 
-// Upload a single file to S3 (fire-and-forget)
+// Upload a single file to S3. Callers may fire-and-forget; the returned promise
+// resolves true on success (or when S3 is disabled) and false on failure — never rejects.
 function uploadFile(filePath) {
-  if (!isEnabled()) return;
+  if (!isEnabled()) return Promise.resolve(true);
   const key = toKey(filePath);
-  const body = fs.readFileSync(filePath);
-  getClient().send(new PutObjectCommand({
+  let body;
+  try { body = fs.readFileSync(filePath); }
+  catch (err) {
+    console.error(`[S3] Upload failed for ${key}:`, err.message);
+    return Promise.resolve(false);
+  }
+  return getClient().send(new PutObjectCommand({
     Bucket: getBucket(),
     Key: key,
     Body: body,
     ContentType: filePath.endsWith('.json') ? 'application/json' : 'application/octet-stream',
-  })).catch(err => {
+  })).then(() => true, err => {
     console.error(`[S3] Upload failed for ${key}:`, err.message);
+    return false;
   });
 }
 

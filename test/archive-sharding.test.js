@@ -17,7 +17,10 @@ function loadFresh(tempDir, { s3Bucket } = {}) {
   if (s3Bucket) {
     require.cache[S3_PATH] = {
       id: S3_PATH, filename: S3_PATH, loaded: true,
-      exports: { isEnabled: () => true, uploadFile: fp => uploads.push(fp) },
+      exports: {
+        isEnabled: () => true,
+        uploadFile: fp => { uploads.push(fp); return Promise.resolve(!uploads.failNext?.(fp)); },
+      },
     };
   }
   const store = require('../src/team/store');
@@ -116,6 +119,12 @@ test('before hydration (S3 on, no index), sync skips gap backfill and does not p
   try {
     await store.saveDeveloper('dev3', payload([session('s1', [q(1)])]));
     assert.equal(readShardEntries(tempDir, 'dev3').length, 1, 'new session still archived');
+
+    // A session the summary already knows about grows before hydration: with no index we
+    // can't know what's archived, so the full session is archived (not just the tail).
+    await store.saveDeveloper('dev3', payload([session('s1', [q(1), q(2)])]));
+    const last = readShardEntries(tempDir, 'dev3').pop();
+    assert.deepEqual(last.queries.map(x => x.userPrompt), ['prompt 1', 'prompt 2']);
     assert.equal(fs.existsSync(path.join(tempDir, 'archive-index', 'dev3.json')), false);
     assert.ok(uploads.some(u => u.includes(path.join('archive', 'dev3'))), 'shard uploaded');
     assert.ok(uploads.every(u => !u.endsWith('dev3.jsonl')), 'no legacy-file upload');
@@ -126,4 +135,39 @@ test('before hydration (S3 on, no index), sync skips gap backfill and does not p
   } finally {
     delete require.cache[S3_PATH];
   }
+});
+
+test('session IDs reach the index only after their shard upload succeeds; failed shards retry', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cs-archive-'));
+  const { store, archive, uploads } = loadFresh(tempDir, { s3Bucket: 'b' });
+  try {
+    archive.markArchivesReady([]);
+    let failing = true;
+    uploads.failNext = fp => failing && fp.endsWith('.jsonl');
+
+    await store.saveDeveloper('dev4', payload([session('s1', [q(1)])]));
+    assert.equal(store.getArchivedSessionIds('dev4').has('s1'), false, 'not indexed while shard upload fails');
+    assert.equal(fs.existsSync(path.join(tempDir, 'archive-index', 'dev4.json')), false);
+
+    failing = false;
+    await store.saveDeveloper('dev4', payload([session('s2', [q(2)])]));
+    const ids = store.getArchivedSessionIds('dev4');
+    assert.ok(ids.has('s1') && ids.has('s2'), 'failed shard retried and both sessions indexed');
+    const index = JSON.parse(fs.readFileSync(path.join(tempDir, 'archive-index', 'dev4.json'), 'utf-8'));
+    assert.deepEqual(index.sessionIds.sort(), ['s1', 's2']);
+  } finally {
+    delete require.cache[S3_PATH];
+  }
+});
+
+test('archiveStats reports parse and read errors', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cs-archive-'));
+  const { archive } = loadFresh(tempDir);
+  fs.mkdirSync(path.join(tempDir, 'archive'), { recursive: true });
+  fs.writeFileSync(path.join(tempDir, 'archive', 'dev5.jsonl'),
+    JSON.stringify(session('a', [q(1)])) + '\n{"truncated\n');
+  const st = archive.archiveStats('dev5');
+  assert.equal(st.entries, 1);
+  assert.equal(st.parseErrors, 1);
+  assert.equal(st.readErrors, 0);
 });

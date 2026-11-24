@@ -499,7 +499,9 @@ function createTeamRouter() {
         }
         return {
           devId: d.devId,
-          status: 'ok',
+          status: st.readErrors > 0 ? 'unreadable' : st.parseErrors > 0 ? 'corrupted' : 'ok',
+          readErrors: st.readErrors,
+          parseErrors: st.parseErrors,
           archiveFiles: st.files,
           archiveEntries: st.entries,
           archivedQueries: st.queries,
