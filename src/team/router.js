@@ -6,6 +6,7 @@ const { saveDeveloper, loadDeveloper, listDevelopers, filterSessions, computeTot
 const { getProductivityAnalytics, getWeekOverWeekDeltas, getInactivityStatus } = require('./analytics');
 const { uploadFile } = require('./s3');
 const { archiveStats } = require('./archive');
+const { createAuthMiddleware, registerAuthRoutes, isAdminRequest } = require('./auth');
 
 /* === Allowlist-based auth === */
 const ALLOWLIST_PATH = path.join(process.env.CLAUDE_SPEND_DATA || path.join(process.cwd(), 'data', 'team'), 'allowlist.json');
@@ -96,6 +97,12 @@ function buildTeamBaseline(allDevs, excludeDevId) {
 
 function createTeamRouter() {
   const router = express.Router();
+
+  // Deny by default: every route below requires a dashboard session, the admin token,
+  // or (GET /dev/:ownId only) the developer's own API key — except the few explicit
+  // public routes in auth.js (sync, whoami, login/logout/session).
+  router.use(createAuthMiddleware({ resolveKey }));
+  registerAuthRoutes(router, express);
 
   // GET /api/team/whoami?key=... - Resolve key to devId (for CLI)
   router.get('/whoami', (req, res) => {
@@ -339,8 +346,7 @@ function createTeamRouter() {
 
   function checkAdmin(req, res) {
     if (!ADMIN_PASS) { res.status(503).json({ error: 'Admin not configured. Set ADMIN_PASSWORD env var.' }); return false; }
-    const auth = req.headers.authorization;
-    if (!auth || auth !== 'Bearer ' + ADMIN_PASS) { res.status(401).json({ error: 'Invalid admin password' }); return false; }
+    if (!isAdminRequest(req)) { res.status(401).json({ error: 'Invalid admin password' }); return false; }
     return true;
   }
 

@@ -223,6 +223,16 @@
 <div id="app" class="container" style="display:none"></div>
 
 <script>
+// Session expired or revoked: any 401 from the team API sends the user back to sign-in.
+(function () {
+  const origFetch = window.fetch.bind(window);
+  window.fetch = async (...args) => {
+    const res = await origFetch(...args);
+    const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
+    if (res.status === 401 && url.indexOf('/api/team/') !== -1 && url.indexOf('/api/team/admin/') === -1) location.reload();
+    return res;
+  };
+})();
 // --- Chart.js Setup ---
 const _chartInstances = {};
 Chart.defaults.font.family = "'Inter', sans-serif";

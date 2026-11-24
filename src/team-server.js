@@ -14,6 +14,7 @@ if (fs.existsSync(envPath)) {
 
 const express = require('express');
 const http = require('http');
+const { hasValidSession } = require('./team/auth');
 const https = require('https');
 const { createTeamRouter } = require('./team/router');
 const { isEnabled: s3Enabled, downloadCore, downloadArchives } = require('./team/s3');
@@ -26,13 +27,19 @@ const pullIndex = args.indexOf('--pull');
 const pullUrl = pullIndex !== -1 ? args[pullIndex + 1] : null;
 
 /* === Pull all dev data from a remote team server === */
+// The remote API requires auth: pass its admin password via CLAUDE_SPEND_REMOTE_ADMIN_PASSWORD.
 function fetchJSON(url) {
   const transport = url.startsWith('https') ? https : http;
+  const headers = {};
+  if (process.env.CLAUDE_SPEND_REMOTE_ADMIN_PASSWORD) {
+    headers.Authorization = 'Bearer ' + process.env.CLAUDE_SPEND_REMOTE_ADMIN_PASSWORD;
+  }
   return new Promise((resolve, reject) => {
-    transport.get(url, (res) => {
+    transport.get(url, { headers }, (res) => {
       let body = '';
       res.on('data', chunk => body += chunk);
       res.on('end', () => {
+        if (res.statusCode === 401) return reject(new Error('Unauthorized — set CLAUDE_SPEND_REMOTE_ADMIN_PASSWORD'));
         try { resolve(JSON.parse(body)); }
         catch { reject(new Error('Invalid JSON from ' + url)); }
       });
@@ -94,13 +101,18 @@ async function start() {
   // Health check
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-  // Serve dashboard frontend
-  app.use(express.static(path.join(__dirname, 'public-team')));
+  // Serve dashboard frontend. The dashboard shell is only served with a valid session;
+  // otherwise the login page. (All data comes from /api/team, which enforces auth itself.)
+  const publicDir = path.join(__dirname, 'public-team');
+  const sendDashboard = (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(path.join(publicDir, hasValidSession(req) ? 'index.html' : 'login.html'));
+  };
+  app.get(['/', '/index.html'], sendDashboard);
+  app.use(express.static(publicDir, { index: false }));
 
   // SPA fallback
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public-team', 'index.html'));
-  });
+  app.get('*', sendDashboard);
 
   const host = process.env.HOST || '0.0.0.0';
   const server = app.listen(port, host, () => {

@@ -50,8 +50,20 @@ claude-spend --no-open     # don't auto-open browser
 git clone https://github.com/alessio-cmyk/claude-spend.git
 cd claude-spend
 npm install
-node src/team-server.js
+DASHBOARD_PASSWORD=<viewer-password> ADMIN_PASSWORD=<admin-password> node src/team-server.js
 ```
+
+### Access control
+
+The team server holds everyone's prompts, so every API route requires authentication:
+
+| Who | How | Can access |
+|---|---|---|
+| Dashboard viewers | `DASHBOARD_PASSWORD`, entered on the sign-in page (7-day HttpOnly session cookie) | Dashboard and all read APIs |
+| Admins | `ADMIN_PASSWORD` as a `Bearer` token (admin panel) | Everything, including key management |
+| Developers' CLI | Their personal API key (`--key`) | Syncing, and reading only their own data for sync diffs |
+
+Without `DASHBOARD_PASSWORD` the dashboard can't be signed into (it fails closed). Rotating it signs everyone out. `--pull <url>` from a protected server needs `CLAUDE_SPEND_REMOTE_ADMIN_PASSWORD`.
 
 ### Adding team members (no cloning needed)
 
