@@ -163,3 +163,44 @@ test('a developer API key reads only that developer\'s own /dev/:id', async () =
     assert.equal((await call(base, 'GET', '/dev/alice?key=' + ALICE_KEY)).status, 401, 'key in query string not accepted');
   } finally { server.close(); }
 });
+
+test('login rate limit cannot be bypassed by changing X-Forwarded-For on a direct connection', async () => {
+  const { server, base } = await startServer();
+  delete process.env.TRUST_PROXY;
+  try {
+    for (let i = 0; i < 10; i++) {
+      const r = await call(base, 'POST', '/login', { body: { password: 'guess' + i }, headers: { 'X-Forwarded-For': '10.0.0.' + i } });
+      assert.equal(r.status, 401);
+    }
+    const blocked = await call(base, 'POST', '/login', { body: { password: DASH_PASS }, headers: { 'X-Forwarded-For': '10.9.9.9' } });
+    assert.equal(blocked.status, 429);
+  } finally { server.close(); }
+});
+
+test('behind a trusted proxy the limit is per forwarded client (last X-Forwarded-For entry)', async () => {
+  const { server, base } = await startServer();
+  process.env.TRUST_PROXY = '1';
+  try {
+    for (let i = 0; i < 10; i++) {
+      // The caller-supplied first entry varies; the proxy-appended last entry is the real client.
+      const r = await call(base, 'POST', '/login', { body: { password: 'guess' + i }, headers: { 'X-Forwarded-For': `1.2.3.${i}, 203.0.113.7` } });
+      assert.equal(r.status, 401);
+    }
+    assert.equal((await call(base, 'POST', '/login', { body: { password: DASH_PASS }, headers: { 'X-Forwarded-For': '9.9.9.9, 203.0.113.7' } })).status, 429);
+    assert.equal((await call(base, 'POST', '/login', { body: { password: DASH_PASS }, headers: { 'X-Forwarded-For': '203.0.113.8' } })).status, 200, 'other clients unaffected');
+  } finally { delete process.env.TRUST_PROXY; server.close(); }
+});
+
+test('admin token alone (no dashboard session) can load the admin Performance Review data', async () => {
+  const { server, base } = await startServer();
+  try {
+    const h = { Authorization: 'Bearer ' + ADMIN_PASS };
+    for (const p of ['/productivity', '/wow', '/prompt-quality']) {
+      assert.equal((await call(base, 'GET', p, { headers: h })).status, 200, p);
+    }
+    // Every data request the admin page makes carries the admin header.
+    const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'public-team', 'admin.html'), 'utf-8');
+    const bare = html.split('\n').filter(l => /fetch\(['"`]\/api\/team\//.test(l) && !l.includes('headers()'));
+    assert.deepEqual(bare, [], 'admin.html fetches without admin headers');
+  } finally { server.close(); }
+});

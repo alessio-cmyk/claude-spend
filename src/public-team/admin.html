@@ -348,22 +348,46 @@ function getDateParams() {
   return `from=${from.toISOString().split('T')[0]}&to=${to.toISOString().split('T')[0]}`;
 }
 
+let perfLoadSeq = 0; // increments per load; responses from an older load are ignored
+
+function renderPerfDateBar() {
+  const presets = [{ k: '7d', l: '7 Days' }, { k: '30d', l: '30 Days' }, { k: '90d', l: '90 Days' }, { k: 'all', l: 'All Time' }];
+  document.getElementById('perfDateBar').innerHTML = presets.map(p =>
+    `<button class="preset ${perfRange === p.k ? 'active' : ''}" onclick="setPerfRange('${p.k}')">${p.l}</button>`
+  ).join('');
+}
+
 async function loadPerfData() {
+  const seq = ++perfLoadSeq;
   const dp = getDateParams();
   const q = dp ? '?' + dp : '';
   try {
     const [prodRes, wowRes] = await Promise.all([
-      fetch('/api/team/productivity' + q),
-      fetch('/api/team/wow'),
+      fetch('/api/team/productivity' + q, { headers: headers() }),
+      fetch('/api/team/wow', { headers: headers() }),
     ]);
-    PERF_DATA = await prodRes.json();
-    WOW_DATA = await wowRes.json();
+    if (!prodRes.ok || !wowRes.ok) throw new Error('Failed to load performance data (HTTP ' + (prodRes.ok ? wowRes.status : prodRes.status) + ')');
+    const perf = await prodRes.json();
+    const wow = await wowRes.json();
+    if (seq !== perfLoadSeq) return; // a newer range was selected meanwhile
+    PERF_DATA = perf;
+    WOW_DATA = wow;
+    PROMPT_QUALITY_DATA = {}; // scores belong to the previous range until re-fetched
     renderPerf();
     // Fetch prompt quality scores async (Gemini, may be slow) — re-render when ready
-    fetch('/api/team/prompt-quality' + q).then(r => r.json()).then(d => {
+    fetch('/api/team/prompt-quality' + q, { headers: headers() }).then(r => r.json()).then(d => {
+      if (seq !== perfLoadSeq) return;
       if (d.scores) { PROMPT_QUALITY_DATA = d.scores; renderPerf(); }
     }).catch(() => {});
   } catch (e) {
+    if (seq !== perfLoadSeq) return;
+    // Don't leave the previous range's results (or export) on screen under the new range.
+    PERF_DATA = null;
+    WOW_DATA = null;
+    PROMPT_QUALITY_DATA = {};
+    renderPerfDateBar();
+    document.getElementById('perfDetail').innerHTML = '';
+    document.getElementById('perfTable').innerHTML = '';
     document.getElementById('perfSummary').innerHTML = `<div class="card" style="padding:24px;text-align:center;color:var(--rose)">Failed to load: ${esc(e.message)}</div>`;
   }
 }
@@ -493,11 +517,7 @@ function generateNotes(d, roi, health) {
 function renderPerf() {
   if (!PERF_DATA) return;
 
-  // Date bar
-  const presets = [{ k: '7d', l: '7 Days' }, { k: '30d', l: '30 Days' }, { k: '90d', l: '90 Days' }, { k: 'all', l: 'All Time' }];
-  document.getElementById('perfDateBar').innerHTML = presets.map(p =>
-    `<button class="preset ${perfRange === p.k ? 'active' : ''}" onclick="setPerfRange('${p.k}')">${p.l}</button>`
-  ).join('');
+  renderPerfDateBar();
 
   const devs = (PERF_DATA.developers || []).filter(d => d.sessions > 0);
   const team = PERF_DATA.team || {};

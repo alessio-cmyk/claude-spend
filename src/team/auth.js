@@ -8,6 +8,7 @@
 //   DASHBOARD_PASSWORD  shared viewer password -> signed HttpOnly session cookie
 //   ADMIN_PASSWORD      admin bearer token (admin panel, admin APIs)
 //   HMAC_SALT           mixed into the session signing key
+//   TRUST_PROXY=1       honor X-Forwarded-For for login rate limiting (only behind a trusted proxy)
 // If DASHBOARD_PASSWORD is unset, dashboard login is disabled (fail closed).
 
 const crypto = require('crypto');
@@ -116,10 +117,19 @@ const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 10;
 const loginFailures = new Map(); // clientId -> { count, resetAt }
 
+// X-Forwarded-For is caller-controlled unless a trusted proxy sits in front, so it is only
+// honored with TRUST_PROXY=1 (e.g. behind App Runner, whose proxy appends the real client
+// IP as the last entry). Otherwise the socket address identifies the client.
+function trustProxy() {
+  return /^(1|true|yes)$/i.test(process.env.TRUST_PROXY || '');
+}
+
 function clientId(req) {
-  // App Runner's proxy appends the real client IP to X-Forwarded-For.
-  const xff = String(req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);
-  return xff.length ? xff[xff.length - 1] : (req.socket && req.socket.remoteAddress) || 'unknown';
+  if (trustProxy()) {
+    const xff = String(req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (xff.length) return xff[xff.length - 1];
+  }
+  return (req.socket && req.socket.remoteAddress) || 'unknown';
 }
 
 function loginBlocked(id, now = Date.now()) {
