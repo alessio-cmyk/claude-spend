@@ -145,12 +145,14 @@ test('session IDs reach the index only after their shard upload succeeds; failed
     let failing = true;
     uploads.failNext = fp => failing && fp.endsWith('.jsonl');
 
-    await store.saveDeveloper('dev4', payload([session('s1', [q(1)])]));
+    await assert.rejects(store.saveDeveloper('dev4', payload([session('s1', [q(1)])])), /Archive upload failed/);
     assert.equal(store.getArchivedSessionIds('dev4').has('s1'), false, 'not indexed while shard upload fails');
     assert.equal(fs.existsSync(path.join(tempDir, 'archive-index', 'dev4.json')), false);
+    assert.equal(store.loadDeveloper('dev4'), null, 'summary not saved, so the client resends next sync');
 
     failing = false;
     await store.saveDeveloper('dev4', payload([session('s2', [q(2)])]));
+    assert.deepEqual(store.loadDeveloper('dev4').sessions.map(x => x.sessionId).sort(), ['s2']);
     const ids = store.getArchivedSessionIds('dev4');
     assert.ok(ids.has('s1') && ids.has('s2'), 'failed shard retried and both sessions indexed');
     const index = JSON.parse(fs.readFileSync(path.join(tempDir, 'archive-index', 'dev4.json'), 'utf-8'));
@@ -170,4 +172,15 @@ test('archiveStats reports parse and read errors', () => {
   assert.equal(st.entries, 1);
   assert.equal(st.parseErrors, 1);
   assert.equal(st.readErrors, 0);
+});
+
+test('shard file names sort in numeric order', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cs-archive-'));
+  fs.mkdirSync(path.join(tempDir, 'archive', 'dev6'), { recursive: true });
+  for (const n of [10, 2, 1]) {
+    const name = `2026-11_boot_${String(n).padStart(6, '0')}.jsonl`;
+    fs.writeFileSync(path.join(tempDir, 'archive', 'dev6', name), JSON.stringify(session('s', [q(n, 'p' + n)])) + '\n');
+  }
+  const { store } = loadFresh(tempDir);
+  assert.deepEqual(store.loadArchivePrompts('dev6').get('s'), ['p1', 'p2', 'p10']);
 });

@@ -1,6 +1,7 @@
 const { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { pipeline } = require('stream/promises');
 
 function getDataDir() { return process.env.CLAUDE_SPEND_DATA || path.join(process.cwd(), 'data', 'team'); }
@@ -80,7 +81,9 @@ async function downloadFiltered(filterRel, label, { skipNewerLocal = false } = {
       const rel = obj.Key.slice(prefix.length);
       return rel && filterRel(rel);
     });
-    await Promise.all(objects.map(async (obj) => {
+    // allSettled: on failure, let every in-flight download finish before the caller retries,
+    // so a retry never races a still-running write.
+    const results = await Promise.allSettled(objects.map(async (obj) => {
       const rel = obj.Key.slice(prefix.length);
       const localPath = path.join(dataDir, rel);
       if (skipNewerLocal) {
@@ -96,11 +99,20 @@ async function downloadFiltered(filterRel, label, { skipNewerLocal = false } = {
       }));
       // Stream to disk: archives are 100s of MB and buffering them all at once
       // (Promise.all over every file) can exhaust instance memory.
-      const tmpPath = localPath + '.download.' + process.pid;
-      await pipeline(getRes.Body, fs.createWriteStream(tmpPath));
-      fs.renameSync(tmpPath, localPath);
+      const tmpPath = localPath + '.download.' + process.pid + '.' + crypto.randomBytes(4).toString('hex');
+      try {
+        await pipeline(getRes.Body, fs.createWriteStream(tmpPath));
+        fs.renameSync(tmpPath, localPath);
+      } catch (err) {
+        try { fs.unlinkSync(tmpPath); } catch {}
+        throw err;
+      }
       count++;
     }));
+    const failed = results.filter(r => r.status === 'rejected');
+    if (failed.length) {
+      throw new Error(`${failed.length} ${label} download(s) failed: ${failed[0].reason && failed[0].reason.message}`);
+    }
 
     continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
   } while (continuationToken);

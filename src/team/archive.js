@@ -143,11 +143,11 @@ function currentShard(safe) {
   fs.mkdirSync(dir, { recursive: true });
   const month = new Date().toISOString().slice(0, 7);
   let seq = shardSeq.get(safe) || 0;
-  let file = path.join(dir, `${month}_${BOOT_ID}_${seq}.jsonl`);
+  let file = path.join(dir, `${month}_${BOOT_ID}_${String(seq).padStart(6, '0')}.jsonl`);
   try {
     if (fs.statSync(file).size >= SHARD_MAX_BYTES) {
       seq++;
-      file = path.join(dir, `${month}_${BOOT_ID}_${seq}.jsonl`);
+      file = path.join(dir, `${month}_${BOOT_ID}_${String(seq).padStart(6, '0')}.jsonl`);
     }
   } catch {}
   shardSeq.set(safe, seq);
@@ -160,6 +160,7 @@ function currentShard(safe) {
 // and the client would stop resending them. Shards whose upload failed are retried on the
 // next append for that dev. Callers serialize per dev (saveDeveloper's lock), which also
 // bounds concurrent shard uploads to one per dev.
+// Returns true only if every shard for this dev is confirmed in S3 (always true without S3).
 async function appendToArchive(devId, entries) {
   const safe = safeId(devId);
   if (!pendingShards.has(safe)) pendingShards.set(safe, new Map());
@@ -171,7 +172,7 @@ async function appendToArchive(devId, entries) {
     if (!pending.has(file)) pending.set(file, new Set());
     for (const e of entries) if (e.sessionId) pending.get(file).add(e.sessionId);
   }
-  if (pending.size === 0) return;
+  if (pending.size === 0) return true;
 
   const confirmed = [];
   for (const [file, sids] of [...pending]) {
@@ -189,6 +190,7 @@ async function appendToArchive(devId, entries) {
     }
     if (changed) writeIndex(safe, ids);
   }
+  return pending.size === 0;
 }
 
 // Entry/query/error counts for the admin archive-health report.

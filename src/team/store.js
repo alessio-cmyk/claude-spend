@@ -92,7 +92,12 @@ async function saveDeveloper(devId, data, timezone) {
         queued.add(s.sessionId);
       }
     }
-    await appendToArchive(devId, toArchive);
+    // If the archive couldn't be persisted, fail the sync before updating the summary:
+    // otherwise the summary's higher queryCount would stop the client from ever resending
+    // the queries that never reached S3. The client retries them on its next sync.
+    if (!(await appendToArchive(devId, toArchive))) {
+      throw new Error('Archive upload failed; please retry the sync');
+    }
 
     const newSessions = rawNewSessions.map(compactSession);
     const merged = [...existingMap.values(), ...newSessions];
