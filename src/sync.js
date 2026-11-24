@@ -34,10 +34,12 @@ function httpRequest(url, options, payload) {
   });
 }
 
-async function fetchServerSessions(serverUrl, devId) {
+async function fetchServerSessions(serverUrl, devId, apiKey) {
   try {
     const url = new URL('/api/team/dev/' + encodeURIComponent(devId) + '?archived=1', serverUrl);
-    const data = await httpRequest(url, { method: 'GET', timeout: 15000 });
+    // The server only lets a developer read their own data, authenticated by API key.
+    const headers = apiKey ? { 'X-Api-Key': apiKey } : {};
+    const data = await httpRequest(url, { method: 'GET', headers, timeout: 15000 });
     const archivedIds = new Set(data._archivedSessionIds || []);
     // Return map of sessionId -> { queryCount, promptCount, archived } for diff logic
     const map = new Map();
@@ -49,7 +51,10 @@ async function fetchServerSessions(serverUrl, devId) {
       });
     }
     return map;
-  } catch {
+  } catch (err) {
+    if (err && err.statusCode === 401) {
+      console.warn('  Server rejected the sync-diff request (401). Pass --key <your-key>; syncing all sessions.');
+    }
     return new Map(); // Server doesn't have this dev yet, send everything
   }
 }
@@ -71,7 +76,7 @@ function slimSession(session, promptCap, responseCap) {
 
 async function syncToTeam(serverUrl, devId, parsedData, apiKey) {
   // Incremental sync: only send new sessions or those needing recompact
-  const serverMap = await fetchServerSessions(serverUrl, devId);
+  const serverMap = await fetchServerSessions(serverUrl, devId, apiKey);
   let sessions = parsedData.sessions || [];
   const totalSessions = sessions.length;
   if (serverMap.size > 0) {

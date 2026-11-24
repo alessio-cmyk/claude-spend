@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Claude Spend - Sign In</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #F8F9FC; --white: #FFFFFF; --text: #0F172A; --text-secondary: #475569;
+    --border: rgba(0,0,0,0.06); --border-strong: rgba(0,0,0,0.1);
+    --indigo: #6366F1; --violet: #8B5CF6; --rose: #F43F5E;
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.06);
+    --radius: 16px; --radius-sm: 10px;
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; padding: 0 16px; }
+  body::before {
+    content: ''; position: fixed; top: 0; left: 0; right: 0; height: 500px;
+    background: radial-gradient(ellipse 80% 60% at 10% 0%, rgba(99,102,241,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 90% 10%, rgba(139,92,246,0.06) 0%, transparent 50%);
+    pointer-events: none; z-index: 0;
+  }
+  .login-card { background: var(--white); border-radius: var(--radius); padding: 40px; border: 1px solid var(--border); box-shadow: var(--shadow-md); max-width: 400px; margin: 80px auto; text-align: center; position: relative; z-index: 1; }
+  h1 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  p { color: var(--text-secondary); font-size: 13px; margin-bottom: 16px; }
+  input { width: 100%; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); font-size: 14px; font-family: var(--font); margin-bottom: 12px; outline: none; }
+  input:focus { border-color: var(--indigo); }
+  .error { color: var(--rose); font-size: 13px; margin-bottom: 8px; min-height: 1em; }
+  button { width: 100%; padding: 10px 14px; border: none; border-radius: var(--radius-sm); font: 600 14px var(--font); color: #fff; background: linear-gradient(135deg, var(--indigo), var(--violet)); cursor: pointer; }
+  button:disabled { opacity: 0.6; cursor: default; }
+</style>
+</head>
+<body>
+<form class="login-card" id="loginForm">
+  <h1>Claude Spend</h1>
+  <p>Enter the team dashboard password</p>
+  <div class="error" id="loginError" role="alert"></div>
+  <input type="password" id="passInput" placeholder="Dashboard password" autocomplete="current-password" autofocus required>
+  <button type="submit" id="submitBtn">Sign In</button>
+</form>
+<script>
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  const err = document.getElementById('loginError');
+  btn.disabled = true; err.textContent = '';
+  try {
+    const res = await fetch('/api/team/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: document.getElementById('passInput').value }),
+    });
+    if (res.ok) { location.reload(); return; }
+    const j = await res.json().catch(() => ({}));
+    err.textContent = j.error || 'Sign in failed';
+  } catch {
+    err.textContent = 'Network error — try again';
+  }
+  btn.disabled = false;
+});
+</script>
+</body>
+</html>
