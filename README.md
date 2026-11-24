@@ -75,6 +75,37 @@ alias claude-sync='npx claude-spend --sync --key <your-key> --server http://your
 
 Then just run `claude-sync` each day.
 
+### Recommended: auto-sync after every session
+
+Install the CLI globally once, so syncing doesn't re-download the package each time (`npx --yes github:...` takes ~18 s per run):
+
+```bash
+npm i -g github:alessio-cmyk/claude-spend
+```
+
+Then add a Claude Code Stop hook in `~/.claude/settings.json`. Mark it `"async": true` so the sync runs in the background instead of holding up your next prompt:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-spend --sync --key <your-key> --server http://your-server:3457",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`claude-spend setup --key <your-key> --server <url>` writes this hook for you, using the global binary when it's installed. If you already have an `npx` hook, re-run setup after the global install and it will switch the hook over.
+
 ### Interactive setup wizard (optional)
 
 If you cloned the repo, you can also run the setup wizard:
