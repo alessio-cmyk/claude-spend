@@ -70,10 +70,26 @@ if (fs.existsSync(settingsPath)) {
 if (!settings.hooks) settings.hooks = {};
 if (!Array.isArray(settings.hooks.Stop)) settings.hooks.Stop = [];
 
+// Prefer a globally installed binary: `npx --yes github:...` re-fetches the package on
+// every run (~18 s), which a Stop hook pays after every single reply.
+// `npx ... setup` puts a temporary copy (~/.npm/_npx/...) on PATH; that one disappears,
+// so only a binary outside npx's cache counts as a real global install.
+function findGlobalBinary() {
+  const r = spawnSync('sh', ['-c', 'command -v claude-spend'], { encoding: 'utf-8' });
+  const bin = r.status === 0 ? r.stdout.trim() : '';
+  if (!bin) return null;
+  let real = bin;
+  try { real = fs.realpathSync(bin); } catch {}
+  return /[\\/]_npx[\\/]/.test(bin) || /[\\/]_npx[\\/]/.test(real) ? null : bin;
+}
+const hasGlobalBinary = !!findGlobalBinary();
+if (!hasGlobalBinary) {
+  console.log('\n  Note: claude-spend is not installed globally, so the hook will use npx (slow, ~18 s per run).');
+  console.log('  Recommended: npm i -g github:alessio-cmyk/claude-spend   then re-run this setup.');
+}
+
 const syncCommand = [
-  'npx',
-  '--yes',
-  'github:alessio-cmyk/claude-spend',
+  ...(hasGlobalBinary ? ['claude-spend'] : ['npx', '--yes', 'github:alessio-cmyk/claude-spend']),
   '--sync',
   '--key',
   shellEscapeArg(apiKey),
@@ -91,6 +107,7 @@ if (existingIdx !== -1) {
   for (const hh of settings.hooks.Stop[existingIdx].hooks) {
     if (hh.command && hh.command.includes('claude-spend --sync')) {
       hh.command = syncCommand;
+      hh.async = true;
     }
   }
   console.log('\n  Updated existing claude-spend sync hook.');
@@ -100,6 +117,8 @@ if (existingIdx !== -1) {
     hooks: [{
       type: 'command',
       command: syncCommand,
+      // Run in the background so syncing never holds up the next prompt.
+      async: true,
     }],
   });
   console.log('\n  Added claude-spend sync hook.');

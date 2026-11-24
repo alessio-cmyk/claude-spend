@@ -17,6 +17,7 @@ const http = require('http');
 const https = require('https');
 const { createTeamRouter } = require('./team/router');
 const { isEnabled: s3Enabled, downloadCore, downloadArchives } = require('./team/s3');
+const { markArchivesReady } = require('./team/archive');
 
 const args = process.argv.slice(2);
 const portIndex = args.indexOf('--port');
@@ -110,10 +111,20 @@ async function start() {
     console.log();
 
     // Hydrate archives in the background now that the server is accepting connections.
+    // Retries until every archive is local (already-downloaded files are skipped), and
+    // only then marks archives ready — before that, missing indexes can't be built safely.
     if (s3Enabled()) {
-      downloadArchives()
-        .then(n => { if (n) console.log(`[S3] Background archive hydration complete (${n} file(s))`); })
-        .catch(err => console.error('[S3] Background archive download failed:', err.message));
+      const hydrate = (attempt) => downloadArchives()
+        .then(n => {
+          console.log(`[S3] Background archive hydration complete (${n} file(s))`);
+          markArchivesReady(require('./team/store').listDevelopers().map(d => d.devId));
+        })
+        .catch(err => {
+          const delay = Math.min(300000, 15000 * 2 ** attempt);
+          console.error(`[S3] Background archive download failed (attempt ${attempt + 1}), retrying in ${delay / 1000}s:`, err.message);
+          setTimeout(() => hydrate(attempt + 1), delay).unref();
+        });
+      hydrate(0);
     }
   });
 
