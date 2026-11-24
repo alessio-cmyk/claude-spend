@@ -353,14 +353,15 @@ async function loadPerfData() {
   const q = dp ? '?' + dp : '';
   try {
     const [prodRes, wowRes] = await Promise.all([
-      fetch('/api/team/productivity' + q),
-      fetch('/api/team/wow'),
+      fetch('/api/team/productivity' + q, { headers: headers() }),
+      fetch('/api/team/wow', { headers: headers() }),
     ]);
+    if (!prodRes.ok || !wowRes.ok) throw new Error('Failed to load performance data (HTTP ' + (prodRes.ok ? wowRes.status : prodRes.status) + ')');
     PERF_DATA = await prodRes.json();
     WOW_DATA = await wowRes.json();
     renderPerf();
     // Fetch prompt quality scores async (Gemini, may be slow) — re-render when ready
-    fetch('/api/team/prompt-quality' + q).then(r => r.json()).then(d => {
+    fetch('/api/team/prompt-quality' + q, { headers: headers() }).then(r => r.json()).then(d => {
       if (d.scores) { PROMPT_QUALITY_DATA = d.scores; renderPerf(); }
     }).catch(() => {});
   } catch (e) {

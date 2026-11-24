@@ -63,7 +63,7 @@ The team server holds everyone's prompts, so every API route requires authentica
 | Admins | `ADMIN_PASSWORD` as a `Bearer` token (admin panel) | Everything, including key management |
 | Developers' CLI | Their personal API key (`--key`) | Syncing, and reading only their own data for sync diffs |
 
-Without `DASHBOARD_PASSWORD` the dashboard can't be signed into (it fails closed). Rotating it signs everyone out. `--pull <url>` from a protected server needs `CLAUDE_SPEND_REMOTE_ADMIN_PASSWORD`.
+Without `DASHBOARD_PASSWORD` the dashboard can't be signed into (it fails closed). Rotating it signs everyone out. `--pull <url>` from a protected server needs `CLAUDE_SPEND_REMOTE_ADMIN_PASSWORD`. Failed sign-ins are limited to 10 per client per 15 minutes; set `TRUST_PROXY=1` only when the server runs behind a reverse proxy that sets `X-Forwarded-For` (otherwise the header is ignored).
 
 ### Adding team members (no cloning needed)
 
