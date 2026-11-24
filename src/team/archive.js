@@ -16,9 +16,11 @@ const path = require('path');
 const crypto = require('crypto');
 const { uploadFile, isEnabled: s3Enabled } = require('./s3');
 
-const DATA_DIR = process.env.CLAUDE_SPEND_DATA || path.join(process.cwd(), 'data', 'team');
-const ARCHIVE_DIR = path.join(DATA_DIR, 'archive');
-const INDEX_DIR = path.join(DATA_DIR, 'archive-index');
+// Resolved per call (not at load) so the data dir always matches CLAUDE_SPEND_DATA,
+// the same way the store resolves it.
+function dataDir() { return process.env.CLAUDE_SPEND_DATA || path.join(process.cwd(), 'data', 'team'); }
+function archiveDir() { return path.join(dataDir(), 'archive'); }
+function indexDir() { return path.join(dataDir(), 'archive-index'); }
 const BOOT_ID = Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
 
 // With S3 on, archives arrive via background hydration after the server starts listening.
@@ -33,9 +35,9 @@ function safeId(devId) {
 function archiveFiles(devId) {
   const safe = safeId(devId);
   const files = [];
-  const legacy = path.join(ARCHIVE_DIR, safe + '.jsonl');
+  const legacy = path.join(archiveDir(), safe + '.jsonl');
   if (fs.existsSync(legacy)) files.push(legacy);
-  const dir = path.join(ARCHIVE_DIR, safe);
+  const dir = path.join(archiveDir(), safe);
   try {
     for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.jsonl')).sort()) {
       files.push(path.join(dir, f));
@@ -88,11 +90,11 @@ function forEachArchiveEntry(devId, fn, errors) {
 }
 
 function indexPath(safe) {
-  return path.join(INDEX_DIR, safe + '.json');
+  return path.join(indexDir(), safe + '.json');
 }
 
 function writeIndex(safe, ids) {
-  fs.mkdirSync(INDEX_DIR, { recursive: true });
+  fs.mkdirSync(indexDir(), { recursive: true });
   const fp = indexPath(safe);
   const tmp = fp + '.tmp.' + process.pid;
   fs.writeFileSync(tmp, JSON.stringify({ sessionIds: [...ids] }));
@@ -139,7 +141,7 @@ const shardSeq = new Map();      // safeId -> current shard sequence number
 const pendingShards = new Map(); // safeId -> Map<shardPath, Set<sessionId>> not yet confirmed in S3
 
 function currentShard(safe) {
-  const dir = path.join(ARCHIVE_DIR, safe);
+  const dir = path.join(archiveDir(), safe);
   fs.mkdirSync(dir, { recursive: true });
   const month = new Date().toISOString().slice(0, 7);
   let seq = shardSeq.get(safe) || 0;
@@ -223,7 +225,7 @@ function _resetForTests() {
 }
 
 module.exports = {
-  ARCHIVE_DIR, INDEX_DIR,
+  archiveDir, indexDir,
   safeId, archiveFiles, forEachArchiveEntry, forEachLineInFile,
   getArchivedSessionIds, loadIndex, appendToArchive, archiveStats, markArchivesReady,
   _resetForTests,
