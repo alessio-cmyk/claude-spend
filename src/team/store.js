@@ -1,9 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 const { uploadFile } = require('./s3');
+const {
+  ARCHIVE_DIR, forEachArchiveEntry, appendToArchive, getArchivedSessionIds,
+  loadIndex: loadArchiveIndex,
+} = require('./archive');
 
 const DATA_DIR = process.env.CLAUDE_SPEND_DATA || path.join(process.cwd(), 'data', 'team');
-const ARCHIVE_DIR = path.join(DATA_DIR, 'archive');
 
 /* === File-level locking to prevent race conditions on concurrent syncs === */
 const _locks = new Map();
@@ -53,77 +56,42 @@ async function saveDeveloper(devId, data, timezone) {
       }
     }
 
-    // Archive queries before compacting
-    const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-    const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
-
-    // Read archive once — extract session IDs and check integrity in a single pass
-    let needsFullRebuild = false;
-    const archivedSessionIds = new Set();
-    try {
-      if (fs.existsSync(archivePath)) {
-        let lineCount = 0, totalQueries = 0;
-        for (const line of fs.readFileSync(archivePath, 'utf-8').split('\n')) {
-          if (!line) continue;
-          try {
-            const parsed = JSON.parse(line);
-            archivedSessionIds.add(parsed.sessionId);
-            totalQueries += (parsed.queries || []).length;
-            lineCount++;
-          } catch {}
-        }
-        const avgPerEntry = lineCount > 0 ? totalQueries / lineCount : 0;
-        needsFullRebuild = lineCount > 0 && avgPerEntry <= 2;
-      }
-    } catch {}
+    // Archive queries before compacting. Uses the small session-ID index instead of
+    // reading the (potentially huge) archive. null = archives not hydrated yet and no
+    // index on disk: then archive only what's clearly new and skip gap backfill, which
+    // would otherwise re-archive every incoming session.
+    const archiveIndex = loadArchiveIndex(devId);
+    const isArchived = sid => (archiveIndex ? archiveIndex.has(sid) : true);
+    const prevById = new Map((existing.sessions || []).map(p => [p.sessionId, p]));
 
     const toArchive = [];
-    if (needsFullRebuild) {
-      // Full rebuild: archive ALL incoming sessions with queries
-      for (const s of (data.sessions || [])) {
-        if (s.queries && s.queries.length > 0) toArchive.push(s);
-      }
-      if (toArchive.length > 0) {
-        // Overwrite corrupted archive
-        const lines = toArchive.map(s => JSON.stringify(s)).join('\n') + '\n';
-        fs.writeFileSync(archivePath, lines);
-        uploadFile(archivePath);
-        console.log(`[archive] Rebuilt ${safe}.jsonl: ${toArchive.length} sessions`);
-      }
-    } else {
-
-      // Normal: archive new queries + sessions missing from archive
-      for (const s of rawNewSessions) {
-        if (s.queries && s.queries.length > 0) toArchive.push(s);
-      }
-      for (const s of updatedSessions) {
-        if (s.queries && s.queries.length > 0) {
-          if (!archivedSessionIds.has(s.sessionId)) {
-            // Session missing from archive entirely — archive all queries
-            toArchive.push(s);
-          } else {
-            const prev = existing.sessions.find(p => p.sessionId === s.sessionId);
-            const prevCount = prev ? (prev.queryCount || 0) : 0;
-            const newQueries = s.queries.slice(prevCount);
-            if (newQueries.length > 0) {
-              toArchive.push({ ...s, queries: newQueries });
-            }
+    for (const s of rawNewSessions) {
+      if (s.queries && s.queries.length > 0) toArchive.push(s);
+    }
+    for (const s of updatedSessions) {
+      if (s.queries && s.queries.length > 0) {
+        if (!isArchived(s.sessionId)) {
+          // Session missing from archive entirely — archive all queries
+          toArchive.push(s);
+        } else {
+          const prev = prevById.get(s.sessionId);
+          const prevCount = prev ? (prev.queryCount || 0) : 0;
+          const newQueries = s.queries.slice(prevCount);
+          if (newQueries.length > 0) {
+            toArchive.push({ ...s, queries: newQueries });
           }
         }
       }
-      // Also archive any incoming session with queries that's missing from the archive
-      for (const s of (data.sessions || [])) {
-        if (s.queries && s.queries.length > 0 && !archivedSessionIds.has(s.sessionId) &&
-            !toArchive.find(a => a.sessionId === s.sessionId)) {
-          toArchive.push(s);
-        }
-      }
-      if (toArchive.length > 0) {
-        const lines = toArchive.map(s => JSON.stringify(s)).join('\n') + '\n';
-        fs.appendFileSync(archivePath, lines);
-        uploadFile(archivePath);
+    }
+    // Also archive any incoming session with queries that's missing from the archive
+    const queued = new Set(toArchive.map(a => a.sessionId));
+    for (const s of (data.sessions || [])) {
+      if (s.queries && s.queries.length > 0 && !isArchived(s.sessionId) && !queued.has(s.sessionId)) {
+        toArchive.push(s);
+        queued.add(s.sessionId);
       }
     }
+    appendToArchive(devId, toArchive);
 
     const newSessions = rawNewSessions.map(compactSession);
     const merged = [...existingMap.values(), ...newSessions];
@@ -157,52 +125,6 @@ function migrateSessionsIfNeeded(data, fp) {
     data.sessions = data.sessions.map(compactSession);
     fs.writeFileSync(fp, JSON.stringify(data));
     uploadFile(fp);
-  }
-}
-
-function dedupArchives() {
-  ensureDir();
-  const files = fs.readdirSync(ARCHIVE_DIR).filter(f => f.endsWith('.jsonl'));
-  for (const file of files) {
-    const archivePath = path.join(ARCHIVE_DIR, file);
-    const lines = fs.readFileSync(archivePath, 'utf-8').trim().split('\n').filter(Boolean);
-    // Group by sessionId, keep all queries deduplicated
-    const sessionQueries = new Map(); // sessionId -> Map<queryIndex, query>
-    const sessionMeta = new Map();    // sessionId -> latest session metadata
-    for (const line of lines) {
-      const s = JSON.parse(line);
-      const sid = s.sessionId;
-      if (!sessionQueries.has(sid)) sessionQueries.set(sid, { map: new Map(), offset: 0 });
-      const { map: qMap } = sessionQueries.get(sid);
-      let offset = sessionQueries.get(sid).offset;
-      const queries = s.queries || [];
-      for (let i = 0; i < queries.length; i++) {
-        const q = queries[i];
-        const key = (q.userTimestamp || '') + '|' + (q.assistantTimestamp || '');
-        // Use sequential index as tiebreaker only when timestamps are missing
-        const dedupKey = key === '|' ? `__idx_${offset + i}` : key;
-        if (!qMap.has(dedupKey)) qMap.set(dedupKey, q);
-      }
-      sessionQueries.get(sid).offset = offset + queries.length;
-      // Keep latest metadata (most queries = most complete)
-      const prev = sessionMeta.get(sid);
-      if (!prev || (s.queryCount || 0) >= (prev.queryCount || 0)) {
-        const { queries, ...meta } = s;
-        sessionMeta.set(sid, meta);
-      }
-    }
-    // Rebuild: one entry per session with all unique queries
-    const deduped = [];
-    for (const [sid, { map: qMap }] of sessionQueries) {
-      const meta = sessionMeta.get(sid);
-      const queries = [...qMap.values()].sort((a, b) =>
-        (a.userTimestamp || '').localeCompare(b.userTimestamp || ''));
-      deduped.push(JSON.stringify({ ...meta, queries }));
-    }
-    const tmpPath = archivePath + '.tmp.' + process.pid;
-    fs.writeFileSync(tmpPath, deduped.join('\n') + '\n');
-    fs.renameSync(tmpPath, archivePath);
-    console.log(`[archive] Deduped ${file}: ${lines.length} entries → ${deduped.length}`);
   }
 }
 
@@ -525,16 +447,12 @@ async function recompactFromArchive(devId) {
     const fp = devPath(devId);
     if (!fs.existsSync(fp)) return { error: 'Developer not found' };
 
-    const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-    const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
-    if (!fs.existsSync(archivePath)) return { error: 'No archive found for ' + devId };
-
-    // Parse archive: group all queries by sessionId
-    const lines = fs.readFileSync(archivePath, 'utf-8').trim().split('\n').filter(Boolean);
+    // Parse archive (streamed, legacy file + shards): group all queries by sessionId
+    let anyEntries = false;
     const archiveSessions = new Map(); // sessionId -> { meta, queries[] }
-    for (const line of lines) {
+    forEachArchiveEntry(devId, s => {
+      anyEntries = true;
       try {
-        const s = JSON.parse(line);
         const sid = s.sessionId;
         if (!archiveSessions.has(sid)) {
           const { queries, ...meta } = s;
@@ -555,7 +473,8 @@ async function recompactFromArchive(devId) {
           entry.queries.push(q);
         }
       } catch {}
-    }
+    });
+    if (!anyEntries) return { error: 'No archive found for ' + devId };
 
     // Load existing dev data
     const existing = JSON.parse(fs.readFileSync(fp, 'utf-8'));
@@ -603,15 +522,10 @@ async function recompactFromArchive(devId) {
 // Read a dev's archive and return Map<sessionId, string[]> of distinct user prompts in order.
 // The archive is the only place full per-query prompts survive compaction.
 function loadArchivePrompts(devId) {
-  const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-  const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
   const bySession = new Map();
   try {
-    if (!fs.existsSync(archivePath)) return bySession;
-    for (const line of fs.readFileSync(archivePath, 'utf-8').split('\n').filter(Boolean)) {
-      let s;
-      try { s = JSON.parse(line); } catch { continue; }
-      if (!s.sessionId || !Array.isArray(s.queries)) continue;
+    forEachArchiveEntry(devId, s => {
+      if (!s || !s.sessionId || !Array.isArray(s.queries)) return;
       let entry = bySession.get(s.sessionId);
       if (!entry) { entry = { prompts: [], seen: new Set() }; bySession.set(s.sessionId, entry); }
       for (const q of s.queries) {
@@ -622,30 +536,16 @@ function loadArchivePrompts(devId) {
         entry.seen.add(p);
         entry.prompts.push(p);
       }
-    }
+    });
   } catch {}
   const result = new Map();
   for (const [sid, { prompts }] of bySession) result.set(sid, prompts);
   return result;
 }
 
-function getArchivedSessionIds(devId) {
-  const safe = devId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-  const archivePath = path.join(ARCHIVE_DIR, safe + '.jsonl');
-  const ids = new Set();
-  try {
-    if (fs.existsSync(archivePath)) {
-      for (const line of fs.readFileSync(archivePath, 'utf-8').split('\n').filter(Boolean)) {
-        try { ids.add(JSON.parse(line).sessionId); } catch {}
-      }
-    }
-  } catch {}
-  return ids;
-}
-
 module.exports = {
   saveDeveloper, loadDeveloper, listDevelopers, loadAllDevelopers,
   computeTotals, computeTotalsFromDaily, computeDailyUsage, filterSessions,
-  snapshotHealthHistory, loadHealthHistory, dedupArchives, recompactFromArchive,
+  snapshotHealthHistory, loadHealthHistory, recompactFromArchive,
   getArchivedSessionIds, loadArchivePrompts,
 };

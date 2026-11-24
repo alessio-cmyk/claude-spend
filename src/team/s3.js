@@ -1,6 +1,7 @@
 const { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const fs = require('fs');
 const path = require('path');
+const { pipeline } = require('stream/promises');
 
 function getDataDir() { return process.env.CLAUDE_SPEND_DATA || path.join(process.cwd(), 'data', 'team'); }
 function getBucket() { return process.env.S3_BUCKET; }
@@ -50,7 +51,7 @@ function isArchiveRel(rel) {
 }
 
 // Download files from S3 to the local data dir, restricted by a relative-key filter.
-async function downloadFiltered(filterRel, label) {
+async function downloadFiltered(filterRel, label, { skipNewerLocal = false } = {}) {
   if (!isEnabled()) return 0;
   const bucket = getBucket();
   const prefix = getPrefix();
@@ -75,15 +76,22 @@ async function downloadFiltered(filterRel, label) {
     await Promise.all(objects.map(async (obj) => {
       const rel = obj.Key.slice(prefix.length);
       const localPath = path.join(dataDir, rel);
+      if (skipNewerLocal) {
+        // This process may already have appended to the file (e.g. a sync landed before
+        // hydration finished); never clobber a local copy with an older remote one.
+        try { if (fs.statSync(localPath).size >= (obj.Size || 0)) return; } catch {}
+      }
       fs.mkdirSync(path.dirname(localPath), { recursive: true });
 
       const getRes = await s3.send(new GetObjectCommand({
         Bucket: bucket,
         Key: obj.Key,
       }));
-      const chunks = [];
-      for await (const chunk of getRes.Body) chunks.push(chunk);
-      fs.writeFileSync(localPath, Buffer.concat(chunks));
+      // Stream to disk: archives are 100s of MB and buffering them all at once
+      // (Promise.all over every file) can exhaust instance memory.
+      const tmpPath = localPath + '.download.' + process.pid;
+      await pipeline(getRes.Body, fs.createWriteStream(tmpPath));
+      fs.renameSync(tmpPath, localPath);
       count++;
     }));
 
@@ -106,7 +114,7 @@ async function downloadCore() {
 
 // Download only the large archive JSONLs (backfill / conversation history).
 async function downloadArchives() {
-  return downloadFiltered(isArchiveRel, 'archives');
+  return downloadFiltered(isArchiveRel, 'archives', { skipNewerLocal: true });
 }
 
 // Upload all local files to S3 (for initial seeding)

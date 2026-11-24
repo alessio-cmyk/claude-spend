@@ -17,6 +17,7 @@ const http = require('http');
 const https = require('https');
 const { createTeamRouter } = require('./team/router');
 const { isEnabled: s3Enabled, downloadCore, downloadArchives } = require('./team/s3');
+const { markArchivesReady } = require('./team/archive');
 
 const args = process.argv.slice(2);
 const portIndex = args.indexOf('--port');
@@ -112,7 +113,11 @@ async function start() {
     // Hydrate archives in the background now that the server is accepting connections.
     if (s3Enabled()) {
       downloadArchives()
-        .then(n => { if (n) console.log(`[S3] Background archive hydration complete (${n} file(s))`); })
+        .then(n => {
+          if (n) console.log(`[S3] Background archive hydration complete (${n} file(s))`);
+          // Local archives are now complete: safe to build any missing session-ID indexes.
+          markArchivesReady(require('./team/store').listDevelopers().map(d => d.devId));
+        })
         .catch(err => console.error('[S3] Background archive download failed:', err.message));
     }
   });
